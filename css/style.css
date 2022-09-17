@@ -21,7 +21,7 @@
     height: 150px;
     color: rgba(240, 248, 255, 0);
     background-image: url('../img/LOGO.png');
-    background-color: rgba(178, 47, 47, 0.164);
+    background-color: rgba(178, 47, 47, 0);
     background-repeat: no-repeat;
     background-position:center;
     background-size: 600px;
@@ -63,7 +63,7 @@
 .banquan{
     width: 100%;
     position:fixed;
-    color: rgba(240, 248, 255, 0.5);
+    color: rgba(240, 248, 255, 0.2);
     bottom: 10px;
     text-align: center;
     z-index: -1;

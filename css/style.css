@@ -1,0 +1,65 @@
+/* 设置内外边距为0 */
+*{
+    margin: 0;
+    padding: 0;
+}
+
+/* 给背景盖上黑色遮罩 */
+.BGcover{
+    content: " ";
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 0;
+}
+
+.mylogo {
+    width: 100%;
+    height: 80px;
+    color: rgba(240, 248, 255, 0);
+    background-image: url('../img/LOGO.png');
+    background-color: rgba(178, 47, 47, 0);
+    background-repeat: no-repeat;
+    background-position:center;
+    background-size: 400px;
+    position:fixed;
+    top: 50%;
+    font-size: 0;
+    margin-top: -75px;
+}
+.myintro {
+    font-size: 30px;
+    width: 200px;
+    height: 50px;
+    line-height: 50px;
+    border-radius: 15px;
+    background-color: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(15px);
+    background-size:contain;
+    color: aliceblue;
+    text-align: center;
+    position:relative;
+    margin:20px auto;
+    top: 100%;
+    transition: all 0.3s ease-in-out;
+}
+.myintro:hover {
+    background-color: rgba(255, 255, 255, 0.15);
+    transform: scale(1.1);
+}
+.myintro:active {
+    background-color: rgba(255, 255, 255, 0.15);
+    transform: scale(0.9);
+}
+/* 底部版权信息 */
+.banquan{
+    width: 100%;
+    position:fixed;
+    color: rgba(240, 248, 255, 0.5);
+    bottom: 10px;
+    text-align: center;
+    z-index: -1;
+}

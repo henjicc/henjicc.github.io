@@ -1,13 +1,24 @@
 /* 网页背景 */
-body{
-    background-image: url(https://s1.ax1x.com/2022/09/18/x9iwYq.jpg);
+/* body{
+    background-image: url(../img/BG.jpg);
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: cover;
+    background-attachment:fixed;
+    z-index: -1;
+} */
+.thebg{
+    width: 100%;
+    height: 100%;
+    position: fixed;
+    top: 0;
+    background-image: url(../img/BG.jpg);
     background-repeat: no-repeat;
     background-position: center;
     background-size: cover;
     background-attachment:fixed;
     z-index: -1;
 }
-
 /* 设置内外边距为0 */
 *{
     margin: 0;

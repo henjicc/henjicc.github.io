@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>随机点名</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="css/numberGeneratorUI.css">
+    
+    <!-- PWA 相关标签 -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#4CAF50">
+    <link rel="apple-touch-icon" href="icons/icon-192x192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="点名">
+    <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+    <link rel="apple-touch-icon" href="icons/icon.svg">
+</head>
+<body>
+    <div class="background-overlay"></div>
+    <div class="container">
+        <div class="display-area">
+            <div class="content-wrapper">
+                <div id="nameDisplay">请先导入名单</div>
+                <div class="start-button-container">
+                    <button id="toggleButton">开始</button>
+                </div>
+            </div>
+            <div id="confetti" class="confetti"></div>
+        </div>
+
+        <!-- 将控制面板移到底部 -->
+        <div class="control-panel">
+            <div class="buttons-group">
+                <button id="importButton">导入名单</button>
+                <button id="settingsButton">设置</button>
+                <button id="fullscreenButton">全屏</button>
+            </div>
+            
+            <div id="settingsPanel" class="settings-panel">
+                <div class="settings-item">
+                    <label>背景颜色：</label>
+                    <input type="color" id="bgColorPicker" value="#ffffff">
+                </div>
+                <div class="settings-item">
+                    <label>文字颜色：</label>
+                    <input type="color" id="textColorPicker" value="#333333">
+                </div>
+                <div class="settings-item">
+                    <label>文字大小：</label>
+                    <input type="range" id="fontSizeSlider" min="50" max="200" value="100">
+                    <span id="fontSizeValue">100%</span>
+                </div>
+                <div class="reset-button-container">
+                    <button id="resetButton">恢复默认</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 添加新的重置确认弹窗 -->
+        <div class="reset-confirm-popup">
+            <div class="reset-confirm-content">
+                <div class="reset-confirm-icon">
+                    <svg viewBox="0 0 24 24" width="24" height="24">
+                        <circle cx="12" cy="12" r="11" fill="rgba(255, 68, 68, 0.1)"/>
+                        <path d="M12 7v6m0 4v-1" stroke="#ff4444" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </div>
+                <div class="reset-confirm-message">
+                    确定要恢复所有默认设置吗？这将清除所有保存的数据。
+                </div>
+                <div class="reset-confirm-buttons">
+                    <button class="reset-confirm-cancel">取消</button>
+                    <button class="reset-confirm-ok">确定重置</button>
+                </div>
+            </div>
+            <div class="reset-confirm-arrow"></div>
+        </div>
+    </div>
+
+    <!-- 导入名单的弹窗 -->
+    <div id="importModal" class="modal">
+        <div class="modal-content">
+            <span class="close">
+                <svg viewBox="0 0 24 24" width="24" height="24">
+                    <circle cx="12" cy="12" r="11" fill="rgba(255, 68, 68, 0.1)"/>
+                    <path d="M8 8L16 16M8 16L16 8" stroke="#ff4444" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+            </span>
+            <h2>导入名单</h2>
+            <p>请输入名单（每行一个名字）：</p>
+            <textarea id="namesInput" rows="10" placeholder="张三&#10;李四&#10;王五"></textarea>
+            <div class="import-buttons">
+                <button id="confirmImport">确认导入</button>
+                <button id="generateNumbers" class="generate-button">生成数字</button>
+                <button id="clearNames" class="clear-button">清空</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加清空确认弹窗 -->
+    <div class="clear-confirm-popup">
+        <div class="reset-confirm-content">
+            <div class="reset-confirm-icon">
+                <svg viewBox="0 0 24 24" width="24" height="24">
+                    <circle cx="12" cy="12" r="11" fill="rgba(255, 68, 68, 0.1)"/>
+                    <path d="M12 7v6m0 4v-1" stroke="#ff4444" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+            </div>
+            <div class="reset-confirm-message">
+                确定要清空当前输入的所有名单吗？
+            </div>
+            <div class="reset-confirm-buttons">
+                <button class="reset-confirm-cancel">取消</button>
+                <button class="reset-confirm-ok">确定清空</button>
+            </div>
+        </div>
+        <div class="reset-confirm-arrow"></div>
+    </div>
+
+    <!-- 在 importModal 后添加 -->
+    <div id="numberGeneratorModal" class="modal">
+        <div class="modal-content">
+            <span class="close">
+                <svg viewBox="0 0 24 24" width="24" height="24">
+                    <circle cx="12" cy="12" r="11" fill="rgba(255, 68, 68, 0.1)"/>
+                    <path d="M8 8L16 16M8 16L16 8" stroke="#ff4444" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+            </span>
+            <h2>生成数字</h2>
+            <div class="generator-form">
+                <div class="form-group">
+                    <label>起始值：</label>
+                    <input type="number" id="startNumber" value="1">
+                </div>
+                <div class="form-group">
+                    <label>结束值：</label>
+                    <input type="number" id="endNumber" value="50">
+                </div>
+                <div class="form-group">
+                    <label>步长：</label>
+                    <input type="number" id="stepNumber" value="1" min="1">
+                </div>
+                <div class="form-group">
+                    <label>补零：</label>
+                    <input type="checkbox" id="padZero" checked>
+                </div>
+                <div class="preview-area">
+                    <label>预览：</label>
+                    <div id="numberPreview"></div>
+                </div>
+                <button id="confirmGenerate">确认生成</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.4.0/dist/confetti.browser.min.js"></script>
+    <script src="js/numberGenerator.js"></script>
+    <script src="script.js"></script>
+</body>
+</html> 

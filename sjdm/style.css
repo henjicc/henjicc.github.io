@@ -1,0 +1,921 @@
+/* 在 CSS 文件的最开头添加全局字体设置 */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    /* 其他已有的 body 样式保持不变 */
+}
+
+.container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+    padding: min(5vh, 30px) 0;
+    box-sizing: border-box;
+    min-height: 100vh;
+}
+
+.control-panel {
+    position: relative;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: min(3vh, 20px);
+    padding: 0 20px;
+    box-sizing: border-box;
+    min-height: 100px;
+}
+
+.display-area {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: none;
+    flex: 1;
+    min-height: 50vh;
+    max-height: 70vh;
+    width: 100%;
+}
+
+.content-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: min(16vh, 80px);
+    transform: translateY(25%);
+}
+
+#nameDisplay {
+    font-size: min(15vw, 12vh);
+    font-weight: bold;
+    color: #000;
+    transition: all 0.3s ease;
+    text-align: center;
+    line-height: 1.2;
+    margin: 0;
+    word-break: break-all;
+}
+
+#nameDisplay.rolling {
+    text-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+    animation: shake 0.1s ease-in-out infinite;
+}
+
+#toggleButton {
+    padding: min(2vh, 15px) min(4vw, 45px);
+    font-size: min(4vw, 32px);
+    font-weight: bold;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    letter-spacing: 2px;
+}
+
+#toggleButton.running {
+    background-color: #ff4444;
+    animation: pulse 1s ease-in-out infinite;
+    box-shadow: 0 4px 20px rgba(255, 0, 0, 0.4);
+}
+
+#toggleButton:hover {
+    background-color: #45a049;
+    transform: scale(1.05);
+}
+
+#toggleButton.running:hover {
+    background-color: #ff0000;
+}
+
+.modal {
+    display: flex;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.5);
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+    justify-content: center;
+    align-items: center;
+}
+
+.modal.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+.modal-content {
+    background-color: white;
+    padding: 30px;
+    border-radius: 15px;
+    width: 90%;
+    max-width: 500px;
+    position: relative;
+    transform: scale(0.7);
+    opacity: 0;
+    transition: all 0.3s ease;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+}
+
+.modal.show .modal-content {
+    transform: scale(1);
+    opacity: 1;
+}
+
+.close {
+    position: absolute;
+    right: 15px;
+    top: 15px;
+    width: 32px;
+    height: 32px;
+    cursor: pointer;
+    transition: transform 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.close:hover {
+    transform: scale(1.1);
+}
+
+.close svg {
+    width: 32px;
+    height: 32px;
+}
+
+.close:hover svg circle {
+    fill: rgba(255, 68, 68, 0.2);
+}
+
+.close:hover svg path {
+    stroke: #ff0000;
+}
+
+#namesInput {
+    width: 100%;
+    margin: 15px 0;
+    padding: 15px;
+    box-sizing: border-box;
+    font-size: 16px;
+    font-family: inherit;  /* 继承父元素的字体 */
+    border: 2px solid #eee;
+    border-radius: 8px;
+    resize: vertical;
+    min-height: 200px;
+    transition: border-color 0.3s ease;
+    line-height: 1.5;     /* 添加适当的行高 */
+}
+
+#namesInput:focus {
+    outline: none;
+    border-color: #2196F3;
+}
+
+#confirmImport {
+    padding: 8px 16px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+#confirmImport:hover {
+    background-color: #45a049;
+}
+
+.settings-button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 8px;
+    margin-left: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.3s;
+}
+
+.settings-button:hover {
+    background-color: rgba(0, 0, 0, 0.1);
+}
+
+.settings-button svg {
+    fill: #333;
+    transition: transform 0.3s;
+}
+
+.settings-button:hover svg {
+    transform: rotate(30deg);
+}
+
+.settings-item {
+    margin: 20px 0;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.settings-item label {
+    color: #666;
+    font-size: 16px;
+}
+
+#fontSizeSlider {
+    flex: 1;
+}
+
+#fontSizeValue {
+    min-width: 60px;
+}
+
+/* 底部三个按钮的基础样式 */
+.buttons-group {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+}
+
+/* 三个按钮的共同样式 */
+.buttons-group button {
+    padding: 10px 12px;
+    font-size: 15px;
+    font-weight: bold;
+    color: #61666d;
+    border: 2px solid #E0E0E0;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    min-width: 80px;
+    /* box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2); */
+}
+
+/* 导入名单按钮样式 */
+#importButton {
+    background-color: #f6f7f8;
+}
+
+#importButton:hover {
+    background-color: #f1f2f3;
+    color: #595e65;
+    transform: scale(1.05);
+    /* box-shadow: 0 6px 20px rgba(33, 150, 243, 0.3); */
+}
+
+/* 设置按钮样式 */
+#settingsButton {
+    background-color: #f6f7f8;
+}
+
+#settingsButton:hover {
+    background-color: #f1f2f3;
+    color: #595e65;
+    transform: scale(1.05);
+    /* box-shadow: 0 6px 20px rgba(255, 152, 0, 0.3); */
+}
+
+/* 全屏按钮样式 */
+#fullscreenButton {
+    background-color: #f6f7f8;
+}
+
+#fullscreenButton:hover {
+    background-color: #f1f2f3;
+    color: #595e65;
+    transform: scale(1.05);
+    /* box-shadow: 0 6px 20px rgba(46, 13, 104, 0.3); */
+}
+
+/* 按钮按下效果 */
+.buttons-group button:active {
+    transform: scale(0.98);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* 设置面板样式 */
+.settings-panel {
+    display: block;
+    background: white;
+    padding: 25px;
+    border-radius: 15px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%) scale(0.7);
+    margin-bottom: 15px;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+    max-height: 80vh;
+    overflow-y: auto;
+    width: min(90vw, 400px);
+}
+
+.settings-panel.show {
+    transform: translateX(-50%) scale(1);
+    opacity: 1;
+    visibility: visible;
+}
+
+/* 开始按钮容器样式 */
+.start-button-container {
+    margin: 0;
+}
+
+/* 修改颜色选择器的统一样式 */
+input[type="color"] {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    width: 60px;
+    height: 40px;
+    padding: 0px;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    cursor: pointer;
+    background: none;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    transition: border-color 0.3s ease;
+}
+
+input[type="color"]:hover {
+    border-color: #5b5b5b;
+}
+
+input[type="color"]::-webkit-color-swatch-wrapper {
+    padding: 0;
+}
+
+input[type="color"]::-webkit-color-swatch {
+    border: none;
+    border-radius: 6px;
+}
+
+/* 滑块样式优化 */
+input[type="range"] {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    width: 200px;
+    height: 6px;
+    background: #eee;
+    border-radius: 3px;
+    outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    width: 20px;
+    height: 20px;
+    background: #2196F3;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background 0.3s ease;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+    background: #1976D2;
+}
+
+/* 添加新的动画效果样式 */
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-5px); }
+    75% { transform: translateX(5px); }
+}
+
+@keyframes backgroundPulse {
+    0% { background-color: rgba(255, 0, 0, 0); }
+    50% { background-color: rgba(255, 0, 0, 0.1); }
+    100% { background-color: rgba(255, 0, 0, 0); }
+}
+
+/* 添加背景动画容器 */
+.background-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: -1;
+    transition: all 0.3s ease;
+}
+
+.background-overlay.active {
+    animation: backgroundPulse 1s ease-in-out infinite;
+}
+
+/* 选中效果 */
+.selected {
+    animation: selectPulse 0.5s ease-out;
+    transform-origin: center;
+}
+
+@keyframes selectPulse {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.2); opacity: 0.8; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+/* 添加作者信息模态框样式 */
+.author-modal .modal-content {
+    max-width: 600px;
+    padding: 40px;
+}
+
+.author-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 30px;
+}
+
+.author-avatar {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: #f0f0f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.author-avatar .emoji {
+    font-size: 40px;
+}
+
+.author-details {
+    color: #333;
+}
+
+.author-name {
+    font-size: 20px;
+    margin-bottom: 15px;
+}
+
+.author-links {
+    margin-bottom: 25px;
+}
+
+.author-links a {
+    color: #2196F3;
+    text-decoration: none;
+    margin-right: 20px;
+    transition: color 0.3s ease;
+}
+
+.author-links a:hover {
+    color: #1976D2;
+    text-decoration: underline;
+}
+
+.project-info {
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 10px;
+    margin-top: 20px;
+}
+
+.project-info h3 {
+    margin-top: 0;
+    color: #333;
+    margin-bottom: 15px;
+}
+
+.project-info ul {
+    padding-left: 20px;
+    margin-bottom: 20px;
+}
+
+.project-info li {
+    margin-bottom: 8px;
+    color: #555;
+}
+
+.version {
+    color: #666;
+    font-size: 14px;
+    margin-top: 15px;
+    text-align: right;
+}
+
+/* 添加提示样式 */
+#settingsButton {
+    position: relative;
+}
+
+#settingsButton::after {
+    /* content: '右键点击查看关于'; */
+    position: absolute;
+    bottom: -30px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.8);
+    color: white;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+}
+
+#settingsButton:hover::after {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* 添加媒体查询适配小屏幕 */
+@media screen and (max-height: 600px) {
+    .control-panel {
+        flex-direction: row;
+        justify-content: center;
+        gap: 20px;
+    }
+
+    .buttons-group {
+        flex-direction: row;
+    }
+
+    .settings-panel {
+        bottom: 120%;
+    }
+}
+
+/* 优化设置面板布局 */
+.settings-panel {
+    max-height: 80vh;
+    overflow-y: auto;
+    width: min(90vw, 400px);
+}
+
+/* 修改设置按钮提示样式 */
+.settings-tip {
+    position: fixed;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 12px 35px 12px 12px;
+    border-radius: 6px;
+    font-size: 14px;
+    white-space: nowrap;
+    transform: translate(-50%, -100%) scale(0.5);
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.5s cubic-bezier(0.18, 1.25, 0.4, 1.1);
+    pointer-events: auto;
+    margin-top: -10px;
+    z-index: 1000;
+}
+
+.settings-tip::after {
+    content: '';
+    position: absolute;
+    bottom: -5px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 6px solid rgba(0, 0, 0, 0.8);
+}
+
+.settings-tip.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translate(-50%, -100%) scale(1);
+}
+
+.settings-tip .tip-close {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.3s ease;
+}
+
+.settings-tip .tip-close:hover {
+    transform: translateY(-50%) scale(1.1);
+}
+
+.settings-tip .tip-close svg {
+    width: 20px;
+    height: 20px;
+}
+
+.settings-tip .tip-close:hover svg circle {
+    fill: rgba(255, 255, 255, 0.2);
+}
+
+.settings-tip .tip-close:hover svg path {
+    stroke: #ffffff;
+}
+
+/* 修改重置确认弹窗样式 */
+.reset-confirm {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.7);
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+    text-align: center;
+    width: 280px;
+    z-index: 2000;  /* 确保在最上层 */
+}
+
+.reset-confirm.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translate(-50%, -50%) scale(1);
+}
+
+.reset-confirm p {
+    margin: 0 0 20px 0;
+    color: #333;
+    font-size: 16px;
+}
+
+.reset-confirm .buttons {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+}
+
+.reset-confirm button {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 14px;
+}
+
+.reset-confirm .confirm {
+    background-color: #ff4444;
+    color: white;
+}
+
+.reset-confirm .confirm:hover {
+    background-color: #ff0000;
+    transform: scale(1.05);
+}
+
+.reset-confirm .cancel {
+    background-color: #666;
+    color: white;
+}
+
+.reset-confirm .cancel:hover {
+    background-color: #555;
+    transform: scale(1.05);
+}
+
+/* 添加遮罩层样式 */
+.reset-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+    z-index: 1999;
+}
+
+.reset-overlay.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* 重置确认弹窗样式 */
+.reset-confirm-popup {
+    position: fixed;
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+    width: 280px;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(20px);
+    transition: all 0.3s ease;
+    z-index: 2000;
+    pointer-events: none;
+}
+
+.reset-confirm-popup.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+.reset-confirm-content {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.reset-confirm-icon {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 5px;
+}
+
+.reset-confirm-icon svg {
+    width: 32px;
+    height: 32px;
+}
+
+.reset-confirm-message {
+    color: #333;
+    font-size: 14px;
+    line-height: 1.5;
+    text-align: center;
+    padding: 0 10px;
+}
+
+.reset-confirm-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+
+.reset-confirm-buttons button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 14px;
+    min-width: 80px;
+}
+
+.reset-confirm-buttons button:hover {
+    transform: scale(1.05);
+}
+
+.reset-confirm-cancel {
+    background-color: #f0f0f0;
+    color: #666;
+}
+
+.reset-confirm-ok {
+    background-color: #ff4444;
+    color: white;
+}
+
+.reset-confirm-cancel:hover {
+    background-color: #e0e0e0;
+}
+
+.reset-confirm-ok:hover {
+    background-color: #ff0000;
+}
+
+.reset-confirm-arrow {
+    position: absolute;
+    left: 50%;
+    bottom: -8px;
+    width: 0;
+    height: 0;
+    transform: translateX(-50%);
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-top: 8px solid white;
+    filter: drop-shadow(0 2px 2px rgba(0,0,0,0.1));
+}
+
+/* 添加重置按钮容器样式 */
+.reset-button-container {
+    margin-top: 20px;
+    text-align: left;
+    width: 100%;
+    position: relative;
+}
+
+#resetButton {
+    width: auto;
+    padding: 6px 12px;
+    font-size: 12px;
+    background-color: #ff4444;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(255, 68, 68, 0.2);
+    line-height: 1.5;
+}
+
+#resetButton:hover {
+    background-color: #ff0000;
+    transform: scale(1.02);
+    box-shadow: 0 4px 12px rgba(255, 68, 68, 0.3);
+}
+
+#resetButton:active {
+    transform: scale(0.98);
+    box-shadow: 0 2px 6px rgba(255, 68, 68, 0.2);
+}
+
+/* 修改设置面板样式，确保有足够的内边距 */
+.settings-panel {
+    padding: 25px;
+    padding-bottom: 30px;
+}
+
+/* 确保最后一个设置项和重置按钮之间有足够间距 */
+.settings-item:last-of-type {
+    margin-bottom: 25px;
+}
+
+/* 添加导入按钮组样式 */
+.import-buttons {
+    display: flex;
+    gap: 15px;
+    justify-content: flex-start;
+    margin-top: 20px;
+}
+
+/* 清空按钮样式 */
+.clear-button {
+    padding: 8px 16px;
+    background-color: #ff4444;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: all 0.3s ease;
+}
+
+.clear-button:hover {
+    background-color: #ff0000;
+    transform: scale(1.05);
+}
+
+/* 清空确认弹窗样式 */
+.clear-confirm-popup {
+    position: fixed;
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+    width: 280px;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(20px);
+    transition: all 0.3s ease;
+    z-index: 2000;
+    pointer-events: none;
+}
+
+.clear-confirm-popup.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+    pointer-events: auto;
+}

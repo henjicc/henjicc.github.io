@@ -1,0 +1,17 @@
+{
+    "name": "随机点名",
+    "short_name": "随机点名",
+    "description": "一个简单实用的随机点名工具",
+    "start_url": "./index.html",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#4CAF50",
+    "icons": [
+        {
+            "src": "icons/icon.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "any maskable"
+        }
+    ]
+} 

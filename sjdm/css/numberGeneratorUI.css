@@ -1,0 +1,109 @@
+/* 数字生成器表单容器样式 */
+.generator-form {
+    display: flex;                /* 使用弹性布局 */
+    flex-direction: column;       /* 垂直排列子元素 */
+    gap: 15px;                   /* 子元素之间的间距 */
+}
+
+/* 表单组样式：包含标签和输入框的容器 */
+.form-group {
+    display: flex;               /* 使用弹性布局 */
+    align-items: center;         /* 垂直居中对齐 */
+    gap: 10px;                   /* 标签和输入框之间的间距 */
+}
+
+/* 表单标签样式 */
+.form-group label {
+    min-width: 70px;            /* 标签最小宽度，保持对齐 */
+    color: #333;                /* 标签文字颜色 */
+}
+
+/* 数字输入框样式 */
+.form-group input[type="number"] {
+    width: 100px;               /* 输入框宽度 */
+    padding: 8px;               /* 内边距 */
+    border: 1px solid #ddd;     /* 边框样式 */
+    border-radius: 4px;         /* 圆角 */
+    font-size: 14px;            /* 文字大小 */
+}
+
+/* 复选框样式 */
+.form-group input[type="checkbox"] {
+    width: 16px;                /* 复选框宽度 */
+    height: 16px;               /* 复选框高度 */
+    cursor: pointer;            /* 鼠标悬停时显示手型 */
+}
+
+/* 预览区域容器样式 */
+.preview-area {
+    margin-top: 0px;           /* 上方间距 */
+    padding: 15px;              /* 内边距 */
+    background: #f8f9fa;        /* 背景色 */
+    border-radius: 6px;         /* 圆角 */
+    border: 1px solid #e9ecef;  /* 边框样式 */
+}
+
+/* 预览内容样式 */
+#numberPreview {
+    margin-top: 8px;            /* 上方间距 */
+    /* 使用系统默认字体栈 */
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: #495057;             /* 文字颜色 */
+    font-size: 20px;            /* 文字大小 */
+    font-weight: bold;
+    line-height: 1.5;           /* 行高 */
+    word-break: break-all;      /* 文字换行方式 */
+}
+
+/* 确认生成按钮样式 */
+#confirmGenerate {
+    background-color: #4CAF50;  /* 按钮背景色 */
+    color: white;               /* 按钮文字颜色 */
+    border: none;               /* 移除边框 */
+    padding: 10px 20px;         /* 内边距 */
+    border-radius: 4px;         /* 圆角 */
+    cursor: pointer;            /* 鼠标悬停时显示手型 */
+    font-size: 14px;            /* 文字大小 */
+    transition: background-color 0.3s;  /* 背景色过渡动画 */
+}
+
+/* 确认生成按钮悬停效果 */
+#confirmGenerate:hover {
+    background-color: #45a049;  /* 悬停时的背景色 */
+}
+
+/* 生成数字按钮样式（在导入名单弹窗中的按钮） */
+.generate-button {
+    background-color: #2196F3;  /* 按钮背景色 */
+    color: white;               /* 按钮文字颜色 */
+    border: none;               /* 移除边框 */
+    padding: 8px 16px;          /* 内边距 */
+    border-radius: 4px;         /* 圆角 */
+    cursor: pointer;            /* 鼠标悬停时显示手型 */
+    font-size: 16px;            /* 修改文字大小与其他按钮一致 */
+    transition: all 0.3s ease;  /* 所有属性的过渡动画 */
+}
+
+/* 生成数字按钮悬停效果 */
+.generate-button:hover {
+    background-color: #1976D2;  /* 悬停时的背景色 */
+    transform: scale(1.05);     /* 悬停时略微放大 */
+}
+
+/* 错误提示文本样式 */
+.error-message {
+    color: #dc3545;            /* 错误文字颜色 */
+    font-size: 12px;           /* 文字大小 */
+    margin-top: 4px;           /* 上方间距 */
+    display: none;             /* 默认隐藏 */
+}
+
+/* 错误状态下显示错误信息 */
+.form-group.error .error-message {
+    display: block;            /* 显示错误信息 */
+}
+
+/* 错误状态下输入框样式 */
+.form-group.error input {
+    border-color: #dc3545;     /* 输入框边框变为红色 */
+} 

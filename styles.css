@@ -1,0 +1,743 @@
+:root {
+    color-scheme: dark;
+    overflow: hidden;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+}
+
+body {
+    font-family: system-ui, -apple-system, sans-serif;
+    color: white;
+    min-height: 100vh;
+    overflow: hidden;
+}
+
+.app {
+    position: relative;
+    min-height: 100vh;
+    width: 100%;
+}
+
+/* 主容器样式 */
+.main-container {
+    position: relative;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    transform: translateZ(0);
+    will-change: transform;
+    backface-visibility: hidden;
+    perspective: 1000px;
+}
+
+.main-container.modal-open {
+    transform: scale(0.95) translateZ(0);
+}
+
+/* 添加一个新的模糊层，替代直接在主容器上使用filter */
+.main-container::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    opacity: 0;
+    transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    pointer-events: none;
+    z-index: 2;
+    transform: translateZ(0) scale(1.2);
+    transform-origin: center;
+}
+
+.main-container.modal-open::after {
+    opacity: 1;
+}
+
+/* 背景样式 */
+.background-image {
+    position: absolute;
+    inset: 0;
+    background-image: url('imgs/BG01.jpg');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    transform: scale(1.1);
+}
+
+/* 背景遮罩样式 */
+.background-overlay {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    transition: background-color 0.5s ease;
+    transform: scale(1.5);
+    transform-origin: center;
+    overflow: hidden;
+}
+
+/* 玻璃卡片样式 */
+.glass-card {
+    position: relative;
+    z-index: 1;
+    padding: 3rem;
+    border-radius: 1.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    perspective: 1000px;
+    /* 动画消失速度调节 */
+    transition: all 2s cubic-bezier(0.16, 1, 0.3, 1);
+    overflow: hidden;
+
+    /* 鼠标光效变量 */
+    --mouse-x: 50%;
+    --mouse-y: 50%;
+
+    /* 组合背景 */
+    background: 
+        radial-gradient(
+            800px circle at var(--mouse-x) var(--mouse-y),
+            rgba(255, 255, 255, 0.08),
+            transparent 40%
+        ),
+        rgba(255, 255, 255, 0.1);
+
+    /* 添加玻效果 */
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    width: 90%;
+    max-width: 400px;
+    margin: 20px;
+}
+
+/* 修改悬停效果 */
+.glass-card:hover {
+    border-color: rgba(255, 255, 255, 0.3);
+    box-shadow: 0 0 30px rgba(255, 255, 255, 0.2);
+    
+    /* 悬停时的组合背景 */
+    background: 
+        radial-gradient(
+            800px circle at var(--mouse-x) var(--mouse-y),
+            rgba(155, 183, 203, 0.2),
+            transparent 40%
+        ),
+        rgba(255, 255, 255, 0.15);
+    /* 动画进入速度调节 */
+    transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.logo {
+    margin-bottom: 2rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.logo svg {
+    width: 64px;
+    height: 82px;
+}
+
+.logo-text {
+    color: #f6f7f8;
+    font-weight: bold;
+    font-size: 1.25rem;
+    text-align: center;
+    line-height: 1.5;
+}
+
+/* 导航按钮样式 */
+.nav-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    align-items: center;
+    width: 100%;
+}
+
+.nav-button {
+    width: 16rem;
+    padding: 1rem 2rem;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(8px);
+    color: white;
+    font-weight: bold;
+    font-size: 1.2rem;
+    border-radius: 0.75rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.nav-button:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: scale(1.05);
+}
+
+/* 模态框样式 */
+.modal {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+    padding: 1rem;
+    visibility: hidden;
+    pointer-events: none;
+    transition: visibility 0s linear 0.5s;
+}
+
+.modal.active {
+    visibility: visible;
+    pointer-events: auto;
+    transition-delay: 0s;
+}
+
+/* 模态框遮罩样式 */
+.modal-overlay {
+    position: absolute;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    perspective: 1000px;
+}
+
+.modal.active .modal-overlay {
+    opacity: 1;
+}
+
+/* 修改模态框内容样式 */
+.modal-content {
+    position: relative;
+    z-index: 51;
+    width: 100%;
+    max-width: 36rem;
+    padding: 2rem;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 1rem;
+    transform: scale(0.9);
+    opacity: 0;
+    transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    backface-visibility: hidden;
+    perspective: 1000px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.modal.active .modal-content {
+    transform: scale(1) translateZ(0);
+    opacity: 1;
+}
+
+/* 模态框内容样式 */
+.modal h2 {
+    text-align: center;
+    margin-bottom: 2rem;
+    font-size: 1.5rem;
+}
+
+/* 修改网格布局样式 */
+.grid-links {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+    width: 100%;
+    max-width: 600px;
+    justify-content: center;
+    align-items: stretch;
+}
+
+/* 当只有一个子元素时的样式 */
+.grid-links:only-child,
+.grid-links a:only-child {
+    grid-column: 1 / -1;
+    width: 250px;
+    margin: 0 auto;
+}
+
+/* 确保两个及以上的元素时每行显示两个 */
+@media (min-width: 640px) {
+    .grid-links {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+.grid-links a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem 1.5rem;
+    text-align: center;
+    color: white;
+    text-decoration: none;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 0.75rem;
+    font-size: 1.1rem;
+    transition: all 0.3s ease;
+    height: 3.5rem;
+    width: 100%;
+}
+
+.grid-links a:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: scale(1.05);
+}
+
+.close-button {
+    display: block;
+    margin: 1.5rem auto 0;
+    padding: 0.5rem 1.5rem;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.close-button:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* 添加媒体查询以处理小屏幕 */
+@media (max-width: 640px) {
+    .glass-card {
+        padding: 2rem;
+        margin: 1rem;
+    }
+
+    .nav-button {
+        width: 100%;
+        min-width: auto;
+    }
+}
+
+/* 添加工具模态框特殊样式 */
+.tool-content {
+    max-width: 80vw;  /* 占据80%视口宽度 */
+    max-height: 80vh; /* 占据80%视口高度 */
+    width: 80vw;      /* 固定宽度为80%视口 */
+    height: 80vh;     /* 固定高度为80%视口 */
+    padding: 0;       /* 移除内边距以最大化iframe空间 */
+}
+
+.tool-frame-container {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    border-radius: 0.75rem;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.tool-frame {
+    width: 100%;
+    height: 100%;
+    border: none;
+    background: transparent;
+}
+
+/* 调工模���框的响式 */
+@media (max-width: 640px) {
+    .tool-content {
+        width: 100%;
+        height: 80vh;
+        margin: 1rem;
+    }
+}
+
+/* 加载动画容器 */
+.tool-frame-container {
+    position: relative;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.tool-frame-container.loading {
+    opacity: 1;
+}
+
+.tool-frame-container.loading::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 2;
+}
+
+.tool-frame-container.loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 48px;
+    height: 48px;
+    border: 4px solid rgba(255, 255, 255, 0.1);
+    border-left-color: white;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    z-index: 3;
+}
+
+.tool-frame-container.loaded {
+    opacity: 1;
+}
+
+.tool-frame {
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.tool-frame-container.loaded .tool-frame {
+    opacity: 1;
+}
+
+@keyframes spin {
+    to {
+        transform: translate(-50%, -50%) rotate(360deg);
+    }
+}
+
+/* 优化工具模态框动画 */
+.tool-content {
+    transform: scale(0.95);
+    opacity: 0;
+    transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.modal.active .tool-content {
+    transform: scale(1);
+    opacity: 1;
+}
+
+/* 添加版权信息样式 */
+.copyright {
+    position: fixed;
+    bottom: 15px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: rgba(255, 255, 255, 0.2);
+    font-size: 0.8rem;
+    text-align: center;
+    z-index: 10;
+}
+
+/* 添加媒体查询来处理移动端显示 */
+@media screen and (max-width: 480px) {
+    .glass-card {
+        width: 92%; /* 略微增加宽度占比 */
+        margin: 10px;
+        padding: 1.5rem 1rem; /* 减小左右内边距 */
+    }
+
+    .nav-buttons {
+        gap: 0.8rem; /* 减小按钮之间的间距 */
+    }
+
+    .nav-button {
+        width: 100%; /* 在移动端占满容器宽度 */
+        max-width: 16rem;
+        padding: 0.8rem 1.5rem; /* 减小按钮内边距 */
+        font-size: 1.1rem; /* 稍微减小字体大小 */
+    }
+}
+
+/* 在更窄的屏幕上进一步优化 */
+@media screen and (max-width: 360px) {
+    .glass-card {
+        width: 94%;
+        margin: 8px;
+        padding: 1.2rem 0.8rem; /* 进一步减小内��距 */
+    }
+
+    .nav-buttons {
+        gap: 0.6rem;
+    }
+
+    .nav-button {
+        padding: 0.7rem 1.2rem;
+        font-size: 1rem; /* 更小的字体大小 */
+    }
+}
+
+/* 修改软件列表样式 */
+.software-content {
+    max-width: 1200px; /* 增加最大宽度以适应更多列 */
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.software-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    padding: 1rem;
+}
+
+.software-category {
+    padding-bottom: 1rem;
+}
+
+.category-title {
+    font-size: 1.2rem;
+    margin-bottom: 1rem;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+/* 修改网格布局，使其在一行显示更多项目 */
+.software-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr); /* 默认显示4列 */
+    gap: 1rem;
+}
+
+.software-item {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 0.75rem;
+    padding: 1rem;
+    transition: all 0.3s ease;
+    cursor: pointer; /* 添加指针样式 */
+}
+
+.software-item:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-2px);
+}
+
+.software-name {
+    color: white;
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+    display: block;
+    text-decoration: none;
+    font-size: 1.1rem;
+}
+
+.software-description {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.9rem;
+}
+
+/* 添加响应式布局 */
+@media (max-width: 1200px) {
+    .software-grid {
+        grid-template-columns: repeat(3, 1fr); /* 中等屏幕显示3列 */
+    }
+}
+
+@media (max-width: 900px) {
+    .software-grid {
+        grid-template-columns: repeat(2, 1fr); /* 小屏幕显示2列 */
+        gap: 0.8rem;
+    }
+    
+    /* 调整卡片内边距 */
+    .software-item {
+        padding: 0.8rem;
+    }
+    
+    /* 调整字体大小 */
+    .software-name {
+        font-size: 1rem;
+    }
+    
+    .software-description {
+        font-size: 0.85rem;
+    }
+}
+
+/* 移除之前的单列布局设置，保持两列 */
+@media (max-width: 600px) {
+    .software-content {
+        width: 95%;
+        margin: 0.5rem;
+    }
+    
+    .software-grid {
+        grid-template-columns: repeat(2, 1fr); /* 保持两列 */
+        gap: 0.5rem;
+    }
+    
+    .software-item {
+        padding: 0.7rem;
+    }
+}
+
+/* 在最小屏幕上依然保持两列 */
+@media (max-width: 400px) {
+    .software-grid {
+        grid-template-columns: repeat(2, 1fr); /* 保持两列 */
+        gap: 0.4rem;
+    }
+    
+    .software-item {
+        padding: 0.6rem;
+    }
+    
+    .software-name {
+        font-size: 0.9rem;
+    }
+    
+    .software-description {
+        font-size: 0.8rem;
+    }
+}
+
+/* 添加软件项标题行样式 */
+.software-title-row {
+    display: flex;
+    align-items: center; /* 改回居中对齐 */
+    gap: 6px;
+    margin-bottom: 0.5rem;
+}
+
+.software-name {
+    color: white;
+    font-weight: bold;
+    font-size: 1.1rem;
+    line-height: 1.2;
+    padding-top: 0; /* 移除顶部内边距 */
+}
+
+.download-icon {
+    min-width: 20px;
+    width: 30px;
+    height: 30px;
+    cursor: pointer;
+    padding: 3px;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: -1px;
+    margin-top: -8px;
+    flex-shrink: 0;
+    opacity: 0.3;
+    position: relative;
+}
+
+.download-icon:hover {
+    opacity: 1;
+    transform: translateY(-1px);
+    background: none; /* 移除悬停时的背景 */
+}
+
+.download-icon svg {
+    width: 100%;
+    height: 100%;
+    fill: currentColor;
+    display: block;
+}
+
+/* 确保软件项内容布局正确 */
+.software-item {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 0.75rem;
+    padding: 1rem;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 修改软件项的响应式布局 */
+@media (max-width: 900px) {
+    .software-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.8rem;
+    }
+    
+    .software-item {
+        padding: 0.8rem;
+    }
+    
+    .software-name {
+        font-size: 0.95rem;
+    }
+    
+    .software-description {
+        font-size: 0.8rem;
+    }
+}
+
+@media (max-width: 600px) {
+    .software-content {
+        width: 95%;
+        margin: 0.5rem;
+    }
+    
+    .software-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.5rem;
+    }
+    
+    .software-item {
+        padding: 0.6rem;
+    }
+
+    .software-title-row {
+        gap: 4px;
+        margin-bottom: 0.3rem;
+    }
+
+    .software-name {
+        font-size: 0.9rem;
+    }
+    
+    .software-description {
+        font-size: 0.75rem;
+        line-height: 1.2;
+    }
+
+    /* 在600px以下隐藏下载图标 */
+    .download-icon {
+        display: none;
+    }
+}
+
+@media (max-width: 400px) {
+    .software-grid {
+        gap: 0.4rem;
+    }
+    
+    .software-item {
+        padding: 0.5rem;
+    }
+    
+    .software-name {
+        font-size: 0.85rem;
+    }
+    
+    .software-description {
+        font-size: 0.7rem;
+        line-height: 1.1;
+    }
+
+    .category-title {
+        font-size: 1rem;
+        margin-bottom: 0.8rem;
+    }
+}

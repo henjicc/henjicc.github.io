@@ -127,40 +127,25 @@ document.addEventListener('DOMContentLoaded', () => {
         link.addEventListener('click', (e) => {
             e.preventDefault();
             const toolId = link.getAttribute('data-tool');
-            openToolFrame(toolId);
+            openToolDirectly(toolId);
         });
     });
 
-    // 打开工具iframe
-    function openToolFrame(toolId) {
-        const toolFrame = document.querySelector('.tool-frame');
-        const toolFrameModal = document.getElementById('toolFrameModal');
-        const toolFrameContainer = document.querySelector('.tool-frame-container');
-        
-        toolFrameContainer.classList.add('loading');
-        
+    // 直接打开工具页面
+    function openToolDirectly(toolId) {
         let toolUrl = '';
         switch(toolId) {
-            case 'sjdm':
-                toolUrl = './sjdm/index.html';
+            case 'random-picker':
+                toolUrl = './tools/random-picker/index.html';
                 break;
             case 'tool2':
-                toolUrl = './tool2/index.html';
+                toolUrl = './tools/tool2/index.html';
                 break;
         }
         
-        toolFrame.onload = () => {
-            setTimeout(() => {
-                toolFrameContainer.classList.remove('loading');
-                toolFrameContainer.classList.add('loaded');
-            }, 100);
-        };
-        
-        toolFrame.src = toolUrl;
-        closeModal();
-        toolFrameModal.classList.add('active');
-        mainContainer.classList.add('modal-open');
-        activeModal = toolFrameModal;
+        if (toolUrl) {
+            window.location.href = toolUrl;
+        }
     }
 
     // 添加鼠标移动光效
@@ -194,4 +179,4 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     loadBackgroundImage();
-}); 
+});

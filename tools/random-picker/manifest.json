@@ -1,7 +1,7 @@
 {
-    "name": "随机点名",
-    "short_name": "随机点名",
-    "description": "一个简单实用的随机点名工具",
+    "name": "随机抽取",
+    "short_name": "随机抽取",
+    "description": "一个简单实用的随机抽取工具",
     "start_url": "./index.html",
     "display": "standalone",
     "background_color": "#ffffff",

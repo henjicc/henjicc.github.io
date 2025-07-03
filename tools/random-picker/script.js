@@ -322,7 +322,7 @@ class NamePicker {
                     </p>
                     <div class="project-info">
                         <h3>项目简介</h3>
-                        <p>这是一个有趣的随机点名系统，使用 Cursor 编写，具有以下特点：</p>
+                        <p>这是一个有趣的随机抽取系统，使用 Cursor 编写，具有以下特点：</p>
                         <ul>
                             <li>支持自定义名单导入</li>
                             <li>炫酷的动画效果</li>

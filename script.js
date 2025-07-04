@@ -139,7 +139,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 toolUrl = './tools/random-picker/index.html';
                 break;
             case 'watermark-tool':
-                toolUrl = './tools/watermark-tool/dist/index.html';
+                toolUrl = 'https://wmt.henjihenji.com/';
                 break;
         }
         

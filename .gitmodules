@@ -1,0 +1,3 @@
+[submodule "tools/watermark-tool"]
+	path = tools/watermark-tool
+	url = https://github.com/henjicc/watermark-tool

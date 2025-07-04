@@ -138,8 +138,8 @@ document.addEventListener('DOMContentLoaded', () => {
             case 'random-picker':
                 toolUrl = './tools/random-picker/index.html';
                 break;
-            case 'tool2':
-                toolUrl = './tools/tool2/index.html';
+            case 'watermark-tool':
+                toolUrl = './tools/watermark-tool/dist/index.html';
                 break;
         }
         

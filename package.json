@@ -1,0 +1,10 @@
+{
+  "name": "henjicc-github-io",
+  "version": "1.0.0",
+  "description": "Main project for henjicc.github.io",
+  "scripts": {
+    "build": "cd tools/watermark-tool && npm install && npm run build"
+  },
+  "author": "henjicc",
+  "license": "ISC"
+}

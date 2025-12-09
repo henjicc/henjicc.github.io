@@ -136,7 +136,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let toolUrl = '';
         switch(toolId) {
             case 'random-picker':
-                toolUrl = './tools/random-picker/index.html';
+                toolUrl = './tools/random-picker/';
                 break;
             case 'watermark-tool':
                 toolUrl = 'https://wmt.henjihenji.com/';

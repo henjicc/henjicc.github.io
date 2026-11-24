@@ -93,9 +93,14 @@ const RETRY_MAX = 60_000;
 const RATE_LIMIT_WAIT = 10_000;
 const RATE_LIMIT_CODE = 307044;
 
+type Entry = { raw: string; gen: number };
 /** 还没写到云端的值。gen 是这个键第几次修改，写入失败时用来判断有没有更新的值已经取代它。 */
-const pending = new Map<string, { raw: string; gen: number }>();
+const pending = new Map<string, Entry>();
 const generations = new Map<string, number>();
+/** 已经发出、还没有结果的值。页面隐藏时连同它们一起强制重写一遍：它们要是在页面没了之后才失败，就再也没机会重试。 */
+const inFlight = new Map<string, Entry>();
+/** 每个键已确认写进云端的最新 gen：早发的写入迟到失败时，不把已被后来的写入覆盖的值放回待写。 */
+const acked = new Map<string, number>();
 let flushTimer: ReturnType<typeof setTimeout> | undefined;
 let failures = 0;
 /** 在这之前不发起写入（重试退避或限频中）。 */
@@ -116,33 +121,55 @@ function isRateLimited(error: unknown): boolean {
   return String((error as { message?: unknown } | null)?.message ?? error).includes(String(RATE_LIMIT_CODE));
 }
 
-async function flushCloud(): Promise<void> {
+const isCurrent = (key: string, entry: Entry) => generations.get(key) === entry.gen && (acked.get(key) ?? 0) < entry.gen;
+
+/**
+ * 把待写的值发出去，返回是否都已写进云端（没有待写的也算）。
+ * force：页面要隐藏或关闭了，这可能是最后的机会。不管退避，并把还没有结果的写入一起重发；被限频就认了。
+ */
+async function flushCloud(force = false): Promise<boolean> {
   clearTimeout(flushTimer);
   flushTimer = undefined;
-  if (!pending.size) return;
-  // 退避中不发：页面隐藏时的立即写也一样，否则只会再撞一次限频
-  if (Date.now() < blockedUntil) {
+  const batch = new Map(pending);
+  if (force) {
+    for (const [key, entry] of inFlight) if (!batch.has(key) && isCurrent(key, entry)) batch.set(key, entry);
+  }
+  if (!batch.size) return true;
+  // 退避中不发，否则只会再撞一次限频
+  if (!force && Date.now() < blockedUntil) {
     scheduleFlush(0);
-    return;
+    return false;
   }
   // 云存储用不了（App 外、或这次没问到）时留在待写里，下次修改或页面隐藏时再试；本机镜像里一直有最新值
   const t = sdk();
-  if (!t || !(await supports("setCloudStorage"))) return;
-  const sent = new Map(pending);
-  pending.clear();
+  if (!t || !(await supports("setCloudStorage"))) return false;
+  for (const key of batch.keys()) pending.delete(key);
+  for (const [key, entry] of batch) inFlight.set(key, entry);
+  const settle = () => {
+    for (const [key, entry] of batch) if (inFlight.get(key) === entry) inFlight.delete(key);
+  };
   try {
-    await t.setCloudStorage(Object.fromEntries([...sent].map(([k, { raw }]) => [k, raw])));
+    await t.setCloudStorage(Object.fromEntries([...batch].map(([k, { raw }]) => [k, raw])));
+    settle();
+    for (const [key, entry] of batch) {
+      acked.set(key, Math.max(acked.get(key) ?? 0, entry.gen));
+      // 同一个值的另一次写入迟到失败、已经放回待写的，这次写上了就不用再发
+      if (pending.get(key) === entry) pending.delete(key);
+    }
     failures = 0;
     blockedUntil = 0;
+    return true;
   } catch (error) {
-    // 放回待写；等待期间又改过的键已经有更新的值在排队，不能用旧值覆盖
-    for (const [key, entry] of sent) {
-      if (generations.get(key) === entry.gen && !pending.has(key)) pending.set(key, entry);
+    settle();
+    // 放回待写；等待期间又改过的键已经有更新的值在排队，已被其他写入确认的也不用再写
+    for (const [key, entry] of batch) {
+      if (isCurrent(key, entry) && !pending.has(key)) pending.set(key, entry);
     }
     failures += 1;
     const wait = Math.min(RETRY_MAX, RETRY_BASE * 2 ** (failures - 1));
     blockedUntil = Date.now() + (isRateLimited(error) ? Math.max(wait, RATE_LIMIT_WAIT) : wait);
-    scheduleFlush(0);
+    if (pending.size) scheduleFlush(0);
+    return false;
   }
 }
 
@@ -150,11 +177,11 @@ function listenForHide(): void {
   if (listening) return;
   listening = true;
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "hidden") void flushCloud();
+    if (document.visibilityState === "hidden") void flushCloud(true);
   });
-  window.addEventListener("pagehide", () => void flushCloud());
+  window.addEventListener("pagehide", () => void flushCloud(true));
   void supports("onPageClose").then((ok) => {
-    if (ok) sdk()?.onPageClose?.(() => void flushCloud());
+    if (ok) sdk()?.onPageClose?.(() => void flushCloud(true));
   });
 }
 
@@ -306,7 +333,7 @@ export function createToyPlatform(): Platform {
     storage: {
       settings: cloudStore,
       local: localStore,
-      flush: flushCloud,
+      flush: () => flushCloud(),
     },
     async setImmersive(on, element) {
       const t = sdk();

@@ -1,7 +1,6 @@
-import type { ReactNode } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
 import { isRouteErrorResponse, Links, Meta, Outlet, Scripts, ScrollRestoration } from "react-router";
 import "~/design/global.css";
-import { NotFoundPage } from "~/pages/NotFoundPage";
 import { AppShell } from "~/shell/AppShell";
 import { themeBootScript } from "~/shell/theme-boot";
 import favicon from "../../icons/favicon.svg?url";
@@ -38,8 +37,16 @@ export default function App() {
   );
 }
 
+// 按需加载：只有数据请求返回 404 时才用得到（找不到的地址平时由通配路由接住），不放进每个页面首屏的包，首页的 JS 有预算
+const NotFoundPage = lazy(() => import("~/pages/NotFoundPage").then((m) => ({ default: m.NotFoundPage })));
+
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  if (isRouteErrorResponse(error) && error.status === 404) return <NotFoundPage />;
+  if (isRouteErrorResponse(error) && error.status === 404)
+    return (
+      <Suspense fallback={null}>
+        <NotFoundPage />
+      </Suspense>
+    );
   return (
     <main className="wrap grid min-h-dvh content-center gap-3">
       <h1 className="m-0 text-title-2">页面出错了</h1>

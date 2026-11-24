@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "react-router dev",
-    "build:web": "node scripts/fetch-videos.ts --ci && react-router build && node scripts/web-404.ts",
+    "build:web": "node scripts/fetch-videos.ts --ci && react-router build && node scripts/web-404.ts && node scripts/home-budget.ts",
     "videos": "node scripts/fetch-videos.ts",
     "preview": "node scripts/serve.ts build/client --port 4173",
     "toy": "node scripts/toy.ts",

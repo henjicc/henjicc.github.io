@@ -1,6 +1,6 @@
 import { ArrowUpRight } from "lucide-react";
 import type { VideosFile } from "~/content/schema";
-import { site } from "~/content/site";
+import { showChannelStats, site } from "~/content/site";
 import { ExternalLink } from "~/shell/links";
 import { Button } from "~/ui/button";
 import { ChannelStats } from "./ChannelStats";
@@ -16,7 +16,7 @@ export function AboutPage({ profile }: { profile: VideosFile["profile"] }) {
         <p className="m-0 text-body-lg">
           {site.name}，{site.tagline}
         </p>
-        <ChannelStats profile={profile} />
+        {showChannelStats ? <ChannelStats profile={profile} /> : null}
         <section className="grid gap-5">
           <h2 className="m-0 text-title-3">关注我</h2>
           <div className="flex flex-wrap gap-3">

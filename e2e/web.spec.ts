@@ -1,3 +1,4 @@
+import { showVideos } from "../src/content/site";
 import { expect, test } from "./fixtures";
 
 test("首页打开，工具箱列出随机抽取", async ({ page }) => {
@@ -24,6 +25,7 @@ test.describe(() => {
   });
 
   test("首页：首屏、频道数据、最新一期和最近的视频", async ({ page }) => {
+    test.skip(!showVideos, "网站暂时不显示视频");
     await page.goto("/");
     await expect(page.getByRole("heading", { level: 1, name: "痕继痕迹" })).toBeVisible();
     await expect(page.getByText("粉丝", { exact: true })).toBeVisible();
@@ -45,6 +47,7 @@ test.describe(() => {
   });
 
   test("作品：列出全部视频，能按播放量排序", async ({ page }) => {
+    test.skip(!showVideos, "网站暂时不显示视频");
     await page.goto("/works/");
     const titles = page.locator('a[href^="https://www.bilibili.com/video/"] h3');
     await expect(titles.first()).toBeVisible();
@@ -54,6 +57,33 @@ test.describe(() => {
     const newest = await titles.first().textContent();
     await page.getByRole("radio", { name: "最多播放" }).click();
     await expect(titles.first()).not.toHaveText(newest ?? "");
+  });
+});
+
+test.describe("不显示视频时", () => {
+  test.skip(showVideos, "只在关掉视频时检查");
+  test.use({ allowDocument404: true });
+
+  test("首页没有视频，频道数据和关注按钮还在", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByRole("heading", { level: 1, name: "痕继痕迹" })).toBeVisible();
+    await expect(page.getByText("粉丝", { exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: /去 B 站看看/ })).toBeVisible();
+    await expect(page.locator('a[href*="bilibili.com/video/"]')).toHaveCount(0);
+    await expect(page.getByText("最新一期")).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "作品" })).toHaveCount(0);
+    await expect(page.locator('a[href^="/works"]')).toHaveCount(0);
+  });
+
+  test("/works/ 是 404 页，浏览器里跳过去也是", async ({ page }) => {
+    const response = await page.goto("/works/");
+    expect(response?.status()).toBe(404);
+    await expect(page.getByRole("heading", { name: "这里起雾了" })).toBeVisible();
+    await page.goto("/about/");
+    await expect(page.getByRole("heading", { level: 1, name: "关于" })).toBeVisible();
+    await page.evaluate(() => (window as unknown as { __reactRouterDataRouter: { navigate: (to: string) => Promise<void> } }).__reactRouterDataRouter.navigate("/works/"));
+    await expect(page.getByRole("heading", { name: "这里起雾了" })).toBeVisible();
+    await expect(page.locator("h1")).toHaveCount(1);
   });
 });
 

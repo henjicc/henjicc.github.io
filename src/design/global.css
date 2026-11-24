@@ -241,16 +241,30 @@
   }
 }
 
-/* 首屏照片上缓慢漂移的雾，周期 dur-ambient；减少动效时停下（全局规则把动画缩成 1ms） */
+/* 首屏照片上缓慢漂移的两层雾，周期 dur-ambient；减少动效时停下（全局规则把动画缩成 1ms）。
+   雾层比场景大，超出的部分在 .fog 自己这里裁掉，不在场景上写 overflow: hidden：
+   场景里有毛玻璃（backdrop-filter，如首页的最新一期）时，Chrome 要把场景的裁剪区域单独渲染成一个面，
+   场景高度带小数时这个面的底边混进一行半透明，晨雾里是一条深色细线（首屏动画期间、页面缩放时都看得到）。 */
 @utility fog {
   position: absolute;
-  inset: -20% -30%;
+  inset: 0;
   z-index: 0;
+  overflow: hidden;
   pointer-events: none;
-  background:
-    radial-gradient(26% 20% at 28% 60%, rgb(240 246 243 / 0.16), transparent 70%),
-    radial-gradient(24% 16% at 74% 38%, rgb(240 246 243 / 0.12), transparent 70%);
-  animation: fog-drift var(--dur-ambient) var(--ease-linear) infinite alternate;
+  &::before,
+  &::after {
+    content: "";
+    position: absolute;
+    inset: -20% -30%;
+    background:
+      radial-gradient(26% 20% at 28% 60%, rgb(240 246 243 / 0.16), transparent 70%),
+      radial-gradient(24% 16% at 74% 38%, rgb(240 246 243 / 0.12), transparent 70%);
+    animation: fog-drift var(--dur-ambient) var(--ease-linear) infinite alternate;
+  }
+  &::after {
+    animation-direction: alternate-reverse;
+    animation-duration: 66s;
+  }
 }
 
 /* 键盘焦点：2px 实线外扩 2px，跟随元素圆角 */

@@ -186,7 +186,7 @@ export default function BatchText() {
 
   // 平台存储没有变更通知；storage 事件只在别的标签页改了存储时触发
   useEffect(() => {
-    const onStorage = () => void syncKeysFromStorage();
+    const onStorage = (e: StorageEvent) => void syncKeysFromStorage(e);
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);

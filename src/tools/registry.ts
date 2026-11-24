@@ -7,8 +7,10 @@
 import batchText from "./batch-text/meta";
 import { defineTool } from "./define";
 import randomPicker from "./random-picker/meta";
+import watermark from "./watermark/meta";
 
 export const tools = [
+  defineTool(watermark, () => import("./watermark/Tool")),
   defineTool(randomPicker, () => import("./random-picker/Tool")),
   defineTool(batchText, () => import("./batch-text/Tool")),
 ];

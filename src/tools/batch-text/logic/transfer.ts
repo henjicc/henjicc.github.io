@@ -1,13 +1,15 @@
 // 接口配置和提示词模板的导入导出。文件结构沿用旧版（apiConfigs / promptTemplates 数组），旧版导出的文件能直接导入。
 import { z } from "zod";
-import type { ApiConfig } from "./api";
+import { checkBaseUrl, type ApiConfig } from "./api";
 import type { PromptTemplate } from "./prompt";
 
 const filled = z.string().trim().min(1);
+// 只查协议；HTTPS 页面能不能请求 HTTP 地址取决于打开的网页，开始处理前再查
+const baseUrl = filled.refine((url) => checkBaseUrl(url, false) === null);
 
 const configFile = z.object({
   apiConfigs: z
-    .array(z.object({ name: filled, baseUrl: filled, model: filled, apiKey: z.string().optional() }))
+    .array(z.object({ name: filled, baseUrl, model: filled, apiKey: z.string().optional() }))
     .min(1),
 });
 
@@ -28,7 +30,7 @@ function parseJson(text: string): unknown {
 
 export function parseConfigFile(text: string): ImportedConfig[] {
   const result = configFile.safeParse(parseJson(text));
-  if (!result.success) throw new Error("文件里没有可用的接口配置，每套都要有名称、接口地址和模型");
+  if (!result.success) throw new Error("文件里没有可用的接口配置，每套都要有名称、以 https:// 或 http:// 开头的接口地址和模型");
   return result.data.apiConfigs.map(({ name, baseUrl, model, apiKey }) => ({
     name: name.trim(),
     baseUrl: baseUrl.trim(),

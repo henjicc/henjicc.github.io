@@ -96,7 +96,7 @@ export function TemplateDialog({ open, onOpenChange }: { open: boolean; onOpenCh
       entries={templates}
       activeId={activeId}
       onSelect={(id) => useSettings.setState({ activeTemplateId: id })}
-      describe={(t) => t.userPrompt.replace(/\s+/g, " ")}
+      describe={(t) => <span className="truncate">{t.userPrompt.slice(0, 400).replace(/\s+/g, " ")}</span>}
       onEdit={(t) => edit({ ...t })}
       onDelete={remove}
       canDelete={(t) => templates.length > 1 && t.id !== DEFAULT_TEMPLATE.id}

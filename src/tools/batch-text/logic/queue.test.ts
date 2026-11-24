@@ -17,7 +17,7 @@ describe("队列", () => {
 describe("missingRequirements", () => {
   const config = { id: "c", name: "示例", baseUrl: "https://llm.example.test/v1", model: "demo" };
   const template = { id: "t", name: "示例", systemPrompt: "", userPrompt: "{content}" };
-  const base = { items: [item("a", "pending")], config, apiKey: "k", template, pageOrigin: "https://www.example.com" };
+  const base = { items: [item("a", "pending")], config, apiKey: "k", template, secureContext: true };
 
   it("都齐了就是空", () => {
     expect(missingRequirements(base)).toEqual([]);
@@ -29,6 +29,15 @@ describe("missingRequirements", () => {
       "先选一个提示词模板",
       "还没填写接口密钥",
     ]);
+  });
+
+  it("模型名为空、密钥带了中文或空格时说清楚", () => {
+    expect(missingRequirements({ ...base, config: { ...config, model: "" }, apiKey: "sk-复制多了" })).toEqual([
+      "模型名还没填",
+      "接口密钥里有空格、中文或其他不能用的字符，检查是不是复制多了",
+    ]);
+    // 首尾空白不算错，发请求时会去掉
+    expect(missingRequirements({ ...base, apiKey: " sk-fictional \n" })).toEqual([]);
   });
 
   it("HTTPS 页面上的 HTTP 地址在开始前就拦下", () => {

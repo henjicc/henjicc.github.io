@@ -28,6 +28,13 @@ describe("接口配置", () => {
     expect(() => parseConfigFile(JSON.stringify({ apiConfigs: [{ name: "x", baseUrl: "" , model: "m" }] }))).toThrow("没有可用的接口配置");
     expect(() => parseConfigFile(JSON.stringify({ apiConfigs: [] }))).toThrow();
   });
+
+  it("接口地址不是 http(s) 的拒绝导入", () => {
+    for (const baseUrl of ["javascript:alert(1)", "file:///etc/passwd", "llm.example.test/v1"]) {
+      expect(() => parseConfigFile(JSON.stringify({ apiConfigs: [{ name: "x", baseUrl, model: "m" }] }))).toThrow("没有可用的接口配置");
+    }
+    expect(parseConfigFile(JSON.stringify({ apiConfigs: [{ name: "x", baseUrl: "http://192.168.1.20/v1", model: "m" }] }))).toHaveLength(1);
+  });
 });
 
 describe("提示词模板", () => {

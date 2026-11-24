@@ -2,11 +2,11 @@ import type { CopyResult, SaveFileResult } from "~/platform";
 import { toast } from "~/ui/sonner";
 
 /**
- * 当前页面的来源，用来判断 HTTPS 页面请求 HTTP 地址会不会被浏览器拦下。
- * 只读协议，不跳转也不改地址，所以不经平台适配层；window.location 被 ESLint 拦着，用 window.origin。
+ * 当前页面是不是安全上下文，用来判断请求 HTTP 地址会不会被浏览器当作混合内容拦下。
+ * 只读一个浏览器标志，两个平台含义相同，所以不经平台适配层。
  */
-export function pageOrigin(): string {
-  return window.origin;
+export function secureContext(): boolean {
+  return window.isSecureContext;
 }
 
 export function reportSave(result: SaveFileResult, success: string) {

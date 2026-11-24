@@ -1,13 +1,15 @@
 import { create } from "zustand";
 import { persist, type PersistStorage } from "zustand/middleware";
+import { platform } from "~/platform";
 import { toolStorage } from "~/shell/tool/persist";
 import type { ApiConfig } from "./logic/api";
 import type { ExportFormat } from "./logic/files";
 import type { PromptTemplate } from "./logic/prompt";
-import type { QueueItem } from "./logic/queue";
+import { stopProcessing, type QueueItem } from "./logic/queue";
 import meta from "./meta";
 
-export const DEFAULT_CONFIG: ApiConfig = { id: "default", name: "默认配置", baseUrl: "https://api.openai.com/v1", model: "gpt-3.5-turbo" };
+// 模型名不预填：哪个模型能用取决于用户的接口，写死一个名字很快就会过时
+export const DEFAULT_CONFIG: ApiConfig = { id: "default", name: "默认配置", baseUrl: "https://api.openai.com/v1", model: "" };
 export const DEFAULT_TEMPLATE: PromptTemplate = {
   id: "default",
   name: "默认模板",
@@ -69,10 +71,26 @@ export const useKeys = create<Keys>()(
   }),
 );
 
+/**
+ * 多个标签页共用同一份存储。另一个标签页关掉“记住”或清除密钥时存储里那一份被删掉，这边要跟着关掉并丢掉内存里的密钥；
+ * 否则这边下一次改动会把全部密钥原样写回去，等于撤销了那边的清除。存储里有记录时以存储为准。
+ * 在 storage 事件里调用（只有别的标签页改动才会触发）。
+ */
+export async function syncKeysFromStorage(): Promise<void> {
+  const stored = await platform.storage.local(meta.id).get<unknown>("keys");
+  if (stored !== undefined) await useKeys.persist.rehydrate();
+  else if (useKeys.getState().remember) useKeys.setState({ keys: {}, remember: false });
+}
+
 /** 这一次打开的文件和结果，只在内存里（旧版也不保存）。 */
 type Session = { items: QueueItem[]; running: boolean; runIds: string[]; concurrency: number };
 
 export const useSession = create<Session>()(() => ({ items: [], running: false, runIds: [], concurrency: 1 }));
+
+/** 停止和离开页面共用：不再算运行中，正在处理的放回待处理。 */
+export function resetRun() {
+  useSession.setState((s) => ({ running: false, items: stopProcessing(s.items) }));
+}
 
 export function updateItem(id: string, patch: Partial<QueueItem>) {
   useSession.setState((s) => ({ items: s.items.map((i) => (i.id === id ? { ...i, ...patch } : i)) }));

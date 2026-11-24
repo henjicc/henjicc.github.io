@@ -16,15 +16,26 @@ import { Switch } from "~/ui/switch";
 import { Tag } from "~/ui/tag";
 import { TextField } from "~/ui/text-field";
 import { ConfigDialog } from "./ConfigDialog";
-import { checkBaseUrl, describeError, ENDPOINT_MESSAGES, isAbort, requestChat, testConnection } from "./logic/api";
-import { formatFileSize, isAcceptedTextFile, previewText, resultFileName, timestamp, type ExportFormat } from "./logic/files";
+import { checkBaseUrl, describeError, ENDPOINT_MESSAGES, INVALID_KEY_MESSAGE, isAbort, isValidApiKey, requestChat, testConnection } from "./logic/api";
+import { formatFileSize, isAcceptedTextFile, MAX_FILE_BYTES, previewText, resultFileName, timestamp, type ExportFormat } from "./logic/files";
 import { runPool } from "./logic/pool";
 import { buildMessages, hasPlaceholder } from "./logic/prompt";
-import { countByStatus, missingRequirements, retryFailed, stopProcessing, type ItemStatus, type QueueItem } from "./logic/queue";
+import { countByStatus, missingRequirements, retryFailed, type ItemStatus, type QueueItem } from "./logic/queue";
 import meta from "./meta";
-import { pageOrigin, reportSave } from "./platform-io";
+import { reportSave, secureContext } from "./platform-io";
 import { PreviewDialog } from "./PreviewDialog";
-import { DEFAULT_SETTINGS, newId, persistedStores, updateItem, useKeys, useLibrary, useSession, useSettings } from "./store";
+import {
+  DEFAULT_SETTINGS,
+  newId,
+  persistedStores,
+  resetRun,
+  syncKeysFromStorage,
+  updateItem,
+  useKeys,
+  useLibrary,
+  useSession,
+  useSettings,
+} from "./store";
 import { NO_PLACEHOLDER, TemplateDialog } from "./TemplateDialog";
 
 const STATUS: Record<ItemStatus, { label: string; tone: "neutral" | "sky" | "moss" | "ember" }> = {
@@ -34,8 +45,25 @@ const STATUS: Record<ItemStatus, { label: string; tone: "neutral" | "sky" | "mos
   error: { label: "失败", tone: "ember" },
 };
 
+const MAX_MB = MAX_FILE_BYTES / 1024 / 1024;
+
 /** 控制栏里的单选列表：接口配置、提示词模板。 */
 function ChoiceList({ label, value, onValueChange, options }: { label: string; value: string; onValueChange: (id: string) => void; options: { id: string; name: string; detail: string }[] }) {
+  // 只有一项且正在用时没有可选的，不用选中态的天蓝底，免得默认项看起来像被强调。没选中时仍按单选列表显示，让人能点选
+  const only = options.length === 1 && options[0]?.id === value ? options[0] : undefined;
+  if (only) {
+    return (
+      <div aria-label={label} role="group" className="grid gap-0.5 rounded-sm border border-line bg-surface-raised px-3 py-2 text-ink">
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-ui">{only.name}</span>
+          <Tag tone="sky" className="ml-auto flex-none">
+            正在用
+          </Tag>
+        </span>
+        <span className="truncate text-caption text-ink-muted">{only.detail}</span>
+      </div>
+    );
+  }
   return (
     <RadioGroup.Root aria-label={label} value={value} onValueChange={onValueChange} className="grid gap-1.5">
       {options.map((o) => (
@@ -98,6 +126,29 @@ function ItemRow({ item, selected, onSelect, onOpen, onDownload, onRemove, remov
   );
 }
 
+// 空状态里的示例，让第一次打开的人看出这个工具做什么。只用于显示，不进队列，也不会发给接口。
+const EXAMPLES: QueueItem[] = [
+  {
+    id: "example-1",
+    name: "林间散记.txt",
+    size: 3277,
+    content: "清晨的雾从山谷里升起来，松针上挂着露水。我沿着溪边的小路往上走，听见远处有啄木鸟的声音。",
+    status: "completed",
+    result: "摘要：作者清晨沿溪进山，记下了雾、露水和鸟鸣。",
+  },
+  {
+    id: "example-2",
+    name: "虚构会议纪要.md",
+    size: 5120,
+    content: "# 周例会\n\n- 甲：新版封面下周交稿\n- 乙：素材整理到第三章",
+    status: "completed",
+    result: "待办：1. 封面下周交稿（甲）2. 素材整理到第三章（乙）",
+  },
+  { id: "example-3", name: "读书笔记.txt", size: 1843, content: "这是一段虚构的读书笔记，用来演示待处理的文件。", status: "pending" },
+];
+
+const noop = () => {};
+
 export default function BatchText() {
   const ready = useStoresHydrated(persistedStores);
   const { activeConfigId, activeTemplateId, exportFormat } = useSettings();
@@ -119,32 +170,55 @@ export default function BatchText() {
   const counts = useMemo(() => countByStatus(items), [items]);
   const completed = items.filter((i) => i.status === "completed");
   const chosen = completed.filter((i) => selected.has(i.id));
-  const endpointProblem = config ? checkBaseUrl(config.baseUrl, pageOrigin()) : null;
+  const endpointProblem = config ? checkBaseUrl(config.baseUrl, secureContext()) : null;
   const runDone = items.filter((i) => runIds.includes(i.id) && (i.status === "completed" || i.status === "error")).length;
 
-  // 离开页面时取消还在跑的请求
-  useEffect(() => () => controller.current?.abort(), []);
+  // 离开页面时停下：取消还在发的请求，状态按“停止”收拾好。文件和结果在模块级的 store 里，回来时还在，不会卡在“处理中”
+  useEffect(
+    () => () => {
+      if (!useSession.getState().running) return;
+      controller.current?.abort();
+      controller.current = null;
+      resetRun();
+    },
+    [],
+  );
+
+  // 平台存储没有变更通知；storage 事件只在别的标签页改了存储时触发
+  useEffect(() => {
+    const onStorage = () => void syncKeysFromStorage();
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   async function addFiles(files: File[]) {
-    const accepted = files.filter((f) => isAcceptedTextFile(f.name, f.type));
-    const skipped = files.length - accepted.length;
+    const textFiles = files.filter((f) => isAcceptedTextFile(f.name, f.type));
+    const notText = files.length - textFiles.length;
+    const tooBig = textFiles.filter((f) => f.size > MAX_FILE_BYTES);
+    const accepted = textFiles.filter((f) => f.size <= MAX_FILE_BYTES);
+    const skipped = [
+      notText ? `${notText} 个不是文本的文件` : "",
+      tooBig.length ? `${tooBig.map((f) => f.name).join("、")} 超过 ${MAX_MB} MB，一次请求放不下，先拆成小文件` : "",
+    ].filter(Boolean);
     if (!accepted.length) {
-      if (files.length) toast.error("只能添加 .txt 和 .md 文本文件");
+      if (tooBig.length) toast.error(`没有添加：${skipped.join("；")}`);
+      else if (files.length) toast.error("只能添加 .txt 和 .md 文本文件");
       return;
     }
     const added: QueueItem[] = await Promise.all(
       accepted.map(async (f) => ({ id: newId(), name: f.name, size: f.size, content: await f.text(), status: "pending" as const })),
     );
     useSession.setState((s) => ({ items: [...s.items, ...added] }));
-    toast.success(`已添加 ${added.length} 个文件`, skipped ? { description: `跳过了 ${skipped} 个不是文本的文件` } : undefined);
+    toast.success(`已添加 ${added.length} 个文件`, skipped.length ? { description: `跳过了${skipped.join("；")}` } : undefined);
   }
 
   async function start() {
-    const missing = missingRequirements({ items, config, apiKey, template, pageOrigin: pageOrigin() });
+    const missing = missingRequirements({ items, config, apiKey, template, secureContext: secureContext() });
     if (missing.length || !config || !template) {
       toast.warning("还不能开始", { description: missing.join("；") });
       return;
     }
+    const key = apiKey.trim();
     const ac = new AbortController();
     controller.current = ac;
     const ids = items.filter((i) => i.status === "pending").map((i) => i.id);
@@ -157,10 +231,10 @@ export default function BatchText() {
         if (!item || item.status !== "pending") return;
         updateItem(id, { status: "processing", error: undefined });
         try {
-          const result = await requestChat(fetch, config, apiKey, buildMessages(template, item.content), signal);
+          const result = await requestChat(fetch, config, key, buildMessages(template, item.content), { signal });
           if (!signal.aborted) updateItem(id, { status: "completed", result });
         } catch (e) {
-          if (!signal.aborted && !isAbort(e)) updateItem(id, { status: "error", error: describeError(e) });
+          if (!signal.aborted && !isAbort(e)) updateItem(id, { status: "error", error: describeError(e, key) });
         }
       },
       { concurrency, signal: ac.signal },
@@ -180,7 +254,7 @@ export default function BatchText() {
   function stop() {
     controller.current?.abort();
     controller.current = null;
-    useSession.setState((s) => ({ running: false, items: stopProcessing(s.items) }));
+    resetRun();
     toast("已停止，没处理完的放回了待处理");
   }
 
@@ -190,16 +264,21 @@ export default function BatchText() {
       toast.error(ENDPOINT_MESSAGES[endpointProblem]);
       return;
     }
-    if (!apiKey.trim()) {
+    const key = apiKey.trim();
+    if (!key) {
       toast.error("先填写接口密钥");
+      return;
+    }
+    if (!isValidApiKey(key)) {
+      toast.error(INVALID_KEY_MESSAGE);
       return;
     }
     setTesting(true);
     try {
-      await testConnection(fetch, config, apiKey);
+      await testConnection(fetch, config, key);
       toast.success("连接成功");
     } catch (e) {
-      toast.error("连接失败", { description: describeError(e) });
+      toast.error("连接失败", { description: describeError(e, key) });
     } finally {
       setTesting(false);
     }
@@ -230,7 +309,8 @@ export default function BatchText() {
   }
 
   function removeItem(id: string) {
-    useSession.setState((s) => ({ items: s.items.filter((i) => i.id !== id) }));
+    // 运行中移除待处理的文件时也从这一轮里去掉，否则进度永远到不了 100%
+    useSession.setState((s) => ({ items: s.items.filter((i) => i.id !== id), runIds: s.runIds.filter((r) => r !== id) }));
     toggle(id, false);
   }
 
@@ -238,7 +318,16 @@ export default function BatchText() {
     const before = useSession.getState().items;
     useSession.setState({ items: [], runIds: [] });
     setSelected(new Set());
-    toast("已清空文件", { action: { label: "撤销", onClick: () => useSession.setState({ items: before }) } });
+    toast("已清空文件", {
+      action: {
+        label: "撤销",
+        onClick: () => {
+          // 撤销时可能已经开始了新一轮：先停下，清空前的文件放回最前面，清空后新加的保留
+          if (useSession.getState().running) stop();
+          useSession.setState((s) => ({ items: [...before, ...s.items.filter((i) => !before.some((b) => b.id === i.id))] }));
+        },
+      },
+    });
   }
 
   const onDrag = {
@@ -323,15 +412,26 @@ export default function BatchText() {
       </ul>
     </div>
   ) : (
-    <FileDrop
-      className="w-full max-w-[520px] bg-transparent"
-      multiple
-      accept=".txt,.md,.markdown,text/plain,text/markdown"
-      title="把文本文件拖到这里"
-      action="选择文件"
-      formats="TXT 和 Markdown，可以多选"
-      onFiles={(files) => void addFiles(files)}
-    />
+    <div className="@container grid max-h-full w-full max-w-[720px] content-center gap-6 overflow-auto">
+      <FileDrop
+        className="w-full max-w-[520px] justify-self-center bg-transparent"
+        multiple
+        accept=".txt,.md,.markdown,text/plain,text/markdown"
+        title="把文本文件拖到这里"
+        action="选择文件"
+        formats={`TXT 和 Markdown，可以多选，单个不超过 ${MAX_MB} MB`}
+        onFiles={(files) => void addFiles(files)}
+      />
+      <section aria-label="示例数据" className="grid gap-2">
+        <Tag className="justify-self-start">示例数据</Tag>
+        {/* inert：示例只给人看，不能点也不能用键盘选中 */}
+        <ul inert className="m-0 grid list-none gap-2 p-0 opacity-70">
+          {EXAMPLES.map((item) => (
+            <ItemRow key={item.id} item={item} selected={false} onSelect={noop} onOpen={noop} onDownload={noop} onRemove={noop} removable={false} />
+          ))}
+        </ul>
+      </section>
+    </div>
   );
 
   const controls = (
@@ -341,7 +441,7 @@ export default function BatchText() {
           label="接口配置"
           value={activeConfigId}
           onValueChange={(id) => useSettings.setState({ activeConfigId: id })}
-          options={configs.map((c) => ({ id: c.id, name: c.name, detail: c.model }))}
+          options={configs.map((c) => ({ id: c.id, name: c.name, detail: c.model || "还没填模型" }))}
         />
         {endpointProblem && endpointProblem !== "empty" ? <p className="m-0 text-caption text-ember">{ENDPOINT_MESSAGES[endpointProblem]}</p> : null}
         <Button size="sm" variant="ghost" className="justify-self-start" onClick={() => setConfigOpen(true)}>
@@ -381,7 +481,7 @@ export default function BatchText() {
           label="提示词模板"
           value={activeTemplateId}
           onValueChange={(id) => useSettings.setState({ activeTemplateId: id })}
-          options={templates.map((t) => ({ id: t.id, name: t.name, detail: t.userPrompt.replace(/\s+/g, " ") }))}
+          options={templates.map((t) => ({ id: t.id, name: t.name, detail: previewText(t.userPrompt, 120) }))}
         />
         {template && !hasPlaceholder(template.userPrompt) ? <p className="m-0 text-caption text-amber">{NO_PLACEHOLDER}</p> : null}
         <Button size="sm" variant="ghost" className="justify-self-start" onClick={() => setTemplateOpen(true)}>

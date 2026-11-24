@@ -62,10 +62,7 @@ export function localStore(namespace: string): KeyValueStore {
   };
 }
 
-export async function downloadCanvas(canvas: HTMLCanvasElement, filename: string): Promise<void> {
-  const type = /\.jpe?g$/i.test(filename) ? "image/jpeg" : "image/png";
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, 0.92));
-  if (!blob) throw new Error("图片太大，浏览器生成不了，换小一点的尺寸再试");
+export function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -73,7 +70,15 @@ export async function downloadCanvas(canvas: HTMLCanvasElement, filename: string
   document.body.append(a);
   a.click();
   a.remove();
+  // 立即撤销会让部分浏览器（旧版 Safari、Firefox）的下载拿不到数据，留一段时间再撤销
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+export async function downloadCanvas(canvas: HTMLCanvasElement, filename: string): Promise<void> {
+  const type = /\.jpe?g$/i.test(filename) ? "image/jpeg" : "image/png";
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, 0.92));
+  if (!blob) throw new Error("图片太大，浏览器生成不了，换小一点的尺寸再试");
+  downloadBlob(blob, filename);
 }
 
 /** 老办法复制：选中一个看不见的文本框再执行 copy。TOY 里剪贴板接口被拒时它通常还能用。 */

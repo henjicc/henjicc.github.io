@@ -6,5 +6,5 @@ import { createWebPlatform } from "./web";
 export const platform: Platform = __PLATFORM__ === "toy" ? createToyPlatform() : createWebPlatform();
 
 export { biliUrl } from "./browser";
-export type { BiliTarget, CopyResult, KeyValueStore, Platform, SaveImageResult } from "./contract";
+export type { BiliTarget, CopyResult, KeyValueStore, Platform, SaveFileResult, SaveImageResult } from "./contract";
 export { setImagePresenter } from "./present";

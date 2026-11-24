@@ -1,5 +1,8 @@
 export type BiliTarget = "video" | "space" | "opus";
+/** saved：已存进 TOY 相册；downloaded：网站已触发下载；shown：存不了，已弹出图片让用户长按保存。 */
 export type SaveImageResult = "saved" | "downloaded" | "shown";
+/** unsupported：这个平台存不了这种文件（TOY 里的非图片），调用方提示用户去网站版。 */
+export type SaveFileResult = SaveImageResult | "unsupported";
 /** copied：已进剪贴板；selected：复制不了，已选中给的元素让用户长按复制；failed：复制不了也没有可选中的元素。 */
 export type CopyResult = "copied" | "selected" | "failed";
 
@@ -16,8 +19,18 @@ export interface Platform {
   /** B 站内的页面：TOY 里用 SDK 原生打开（必须在点击事件里调用），网站和其他环境开新窗口。 */
   openBili(type: BiliTarget, id: string): Promise<void>;
   openExternal(url: string): void;
-  /** 网站触发下载；TOY 存进相册（先压成 JPEG）；都不行时弹出图片让用户长按保存。调用方按结果弹轻提示。 */
-  saveImage(canvas: HTMLCanvasElement, filename: string): Promise<SaveImageResult>;
+  /**
+   * 网站：Blob 原样下载（格式、透明、EXIF 都不变），画布按 filename 后缀编码成 PNG 或 JPEG 下载。
+   * TOY：一律转成白底 JPEG 存进相册，先降质量、再缩尺寸，让数据尽量 ≤2MB、绝不超过 SDK 的 5MB 上限；filename 不用。
+   * SDK 存完没有任何系统提示，调用方必须按结果自己弹轻提示（"saved" 时提示“已存到相册”）。
+   * 都不行时弹出图片让用户长按保存，返回 "shown"。图片解码或编码失败时抛出带中文说明的错误。
+   */
+  saveImage(image: HTMLCanvasElement | Blob, filename: string): Promise<SaveImageResult>;
+  /**
+   * 网站：任意文件触发下载，返回 "downloaded"。
+   * TOY：image/* 走 saveImage 的相册路径；其他类型不尝试下载（App 里的下载没验证过），返回 "unsupported"。
+   */
+  saveFile(blob: Blob, filename: string): Promise<SaveFileResult>;
   /** TOY 里剪贴板接口被拒，按 execCommand → 选中 source 的顺序退回。 */
   copyText(text: string, source?: HTMLElement | null): Promise<CopyResult>;
   /** 只有 TOY 有：分享图片本身（≤2MB）。 */

@@ -13,7 +13,7 @@ import {
   selectContents,
   writeLocalJson,
 } from "./browser";
-import type { KeyValueStore, Platform } from "./contract";
+import type { KeyValueStore, Platform, SaveImageResult } from "./contract";
 import { presentImage } from "./present";
 import type { ToyAbility, ToySdk } from "./types/toy";
 
@@ -24,8 +24,15 @@ const CLOUD_WRITE_DELAY = 1200;
 /** SDK 的 isSupport 在 App 外可能一直不返回，超时就当不支持。 */
 const SUPPORT_TIMEOUT = 1500;
 const CLOUD_READ_TIMEOUT = 2500;
-/** saveImageToAlbum 的 base64 上限 5MB，官方建议 2MB 内。 */
-const IMAGE_TARGET_BYTES = 2 * 1024 * 1024;
+// saveImageToAlbum 的 base64 上限 5MB，官方建议 2MB 内（sharePicture 上限 2MB）。
+// 文档没说按解码后字节还是按字符串算，这里按整个 data URL 的字符数算，偏保守。
+const IMAGE_TARGET_LENGTH = 2 * 1024 * 1024;
+const IMAGE_LIMIT_LENGTH = 5 * 1024 * 1024;
+/** iOS WebKit 的画布面积上限约 1677 万像素，超过时拿不到绘图上下文或画出空白，所以先缩到这个面积内。 */
+const CANVAS_MAX_PIXELS = 16_777_216;
+const JPEG_QUALITIES = [0.9, 0.8, 0.7, 0.6];
+/** 每轮缩小后重新试一遍各档质量；8 轮每轮至少缩到 80%，任何尺寸都能压到目标以内。 */
+const MAX_SCALE_ROUNDS = 8;
 
 type Envelope = { t: number; v: unknown };
 
@@ -146,14 +153,66 @@ function cloudStore(namespace: string): KeyValueStore {
   };
 }
 
-function canvasToJpeg(canvas: HTMLCanvasElement): string {
-  let quality = 0.9;
-  let data = canvas.toDataURL("image/jpeg", quality);
-  while (data.length * 0.75 > IMAGE_TARGET_BYTES && quality > 0.55) {
-    quality -= 0.1;
-    data = canvas.toDataURL("image/jpeg", quality);
+type Drawable = HTMLCanvasElement | ImageBitmap;
+
+async function decodeImage(image: HTMLCanvasElement | Blob): Promise<Drawable> {
+  if (!(image instanceof Blob)) return image;
+  try {
+    // 默认按 EXIF 方向摆正，和网站上看到的一致
+    return await createImageBitmap(image);
+  } catch {
+    throw new Error("这张图片读不出来，换成 PNG 或 JPEG 再试");
   }
-  return data;
+}
+
+function render(source: Drawable, scale: number): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(source.width * scale));
+  canvas.height = Math.max(1, Math.round(source.height * scale));
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("图片太大，浏览器生成不了，换小一点的尺寸再试");
+  // JPEG 没有透明通道，不铺底的话透明处会变成黑色
+  context.fillStyle = "#fff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(source, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
+/** 转成给 SDK 的 JPEG data URL：先降质量，还超过 2MB 就缩尺寸；结果不会超过 5MB，做不到就抛错。 */
+async function toAlbumJpeg(image: HTMLCanvasElement | Blob): Promise<string> {
+  const source = await decodeImage(image);
+  try {
+    let scale = Math.min(1, Math.sqrt(CANVAS_MAX_PIXELS / (source.width * source.height || 1)));
+    let data = "";
+    for (let round = 0; round < MAX_SCALE_ROUNDS; round++) {
+      const canvas = render(source, scale);
+      for (const quality of JPEG_QUALITIES) {
+        data = canvas.toDataURL("image/jpeg", quality);
+        if (data.length <= IMAGE_TARGET_LENGTH) return data;
+      }
+      // 按面积和数据量近似成正比估算缩放比例，乘 0.9 留余量少走一轮
+      scale *= Math.min(0.8, Math.sqrt(IMAGE_TARGET_LENGTH / data.length) * 0.9);
+    }
+    if (data.length <= IMAGE_LIMIT_LENGTH) return data;
+    throw new Error("图片太大，存不进相册，换小一点的尺寸再试");
+  } finally {
+    if (!(source instanceof HTMLCanvasElement)) source.close();
+  }
+}
+
+async function saveImage(image: HTMLCanvasElement | Blob): Promise<SaveImageResult> {
+  const data = await toAlbumJpeg(image);
+  const t = sdk();
+  if (t && (await supports("saveImageToAlbum"))) {
+    try {
+      await t.saveImageToAlbum({ base64Data: data, hintMsg: "需要相册权限来保存图片" });
+      return "saved";
+    } catch {
+      // 没给相册权限等：退回显示图片
+    }
+  }
+  presentImage(data);
+  return "shown";
 }
 
 export function createToyPlatform(): Platform {
@@ -172,19 +231,10 @@ export function createToyPlatform(): Platform {
       openWindow(biliUrl(type, id));
     },
     openExternal: openWindow,
-    async saveImage(canvas) {
-      const data = canvasToJpeg(canvas);
-      const t = sdk();
-      if (t && (await supports("saveImageToAlbum"))) {
-        try {
-          await t.saveImageToAlbum({ base64Data: data, hintMsg: "需要相册权限来保存图片" });
-          return "saved";
-        } catch {
-          // 没给相册权限等：退回显示图片
-        }
-      }
-      presentImage(data);
-      return "shown";
+    saveImage,
+    async saveFile(blob) {
+      if (!blob.type.startsWith("image/")) return "unsupported";
+      return saveImage(blob);
     },
     async copyText(text, source) {
       if (execCopy(text)) return "copied";
@@ -197,7 +247,7 @@ export function createToyPlatform(): Platform {
     async shareImage(canvas) {
       const t = sdk();
       if (!t || !(await supports("sharePicture"))) throw new Error("这里分享不了图片，先保存到相册再发");
-      await t.sharePicture({ base64Data: canvasToJpeg(canvas) });
+      await t.sharePicture({ base64Data: await toAlbumJpeg(canvas) });
     },
     storage: {
       settings: cloudStore,

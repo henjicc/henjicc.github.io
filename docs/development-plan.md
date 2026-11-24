@@ -65,7 +65,10 @@ export interface Platform {
   kind: "web" | "toy";
   openBili(type: "video" | "space" | "opus", id: string): Promise<void>;
   openExternal(url: string): void;
-  saveImage(canvas: HTMLCanvasElement, filename: string): Promise<"saved" | "downloaded" | "shown">;
+  // 网站：Blob 原样下载、画布编码后下载；TOY：一律转白底 JPEG（尽量 ≤2MB，绝不超 5MB）存相册，SDK 没提示，调用方按结果弹轻提示
+  saveImage(image: HTMLCanvasElement | Blob, filename: string): Promise<"saved" | "downloaded" | "shown">;
+  // 网站：任意文件下载；TOY：image/* 走 saveImage，其他返回 "unsupported"（App 里的下载没验证过），调用方提示去网站
+  saveFile(blob: Blob, filename: string): Promise<"saved" | "downloaded" | "shown" | "unsupported">;
   // TOY 里剪贴板接口被拒：execCommand → 选中 source 让用户长按复制；都不行返回 "failed"
   copyText(text: string, source?: HTMLElement | null): Promise<"copied" | "selected" | "failed">;
   shareImage?(canvas: HTMLCanvasElement): Promise<void>;

@@ -1,6 +1,7 @@
 import {
   biliUrl,
   browserFullscreen,
+  downloadBlob,
   downloadCanvas,
   execCopy,
   localStore,
@@ -17,8 +18,13 @@ export function createWebPlatform(): Platform {
       openWindow(biliUrl(type, id));
     },
     openExternal: openWindow,
-    async saveImage(canvas, filename) {
-      await downloadCanvas(canvas, filename);
+    async saveImage(image, filename) {
+      if (image instanceof Blob) downloadBlob(image, filename);
+      else await downloadCanvas(image, filename);
+      return "downloaded";
+    },
+    async saveFile(blob, filename) {
+      downloadBlob(blob, filename);
       return "downloaded";
     },
     async copyText(text, source) {

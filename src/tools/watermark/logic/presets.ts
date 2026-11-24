@@ -1,8 +1,16 @@
 // 预设和水印图片的数据结构，以及预设的导入导出（文件或“预设代码”是同一段 JSON）。
 import { z } from "zod";
-import { FACTORY_MARK, parseMarkSettings, type MarkSettings } from "./settings";
+import { FACTORY_MARK, migrateOffsetsV1, parseMarkSettings, type MarkSettings } from "./settings";
 
-/** 图片水印：存成 PNG data URL。 */
+/**
+ * 每张水印图片 data URL 的目标长度（字符）。图片和预设整个存在一个 localStorage 键里，
+ * 浏览器给一个域名的本机存储一般只有约 500 万字符，全站的工具共用。
+ */
+export const MARK_BUDGET = 300_000;
+/** 整个预设库序列化后的上限（字符），给同站其他工具的存储留出余量。 */
+export const LIBRARY_BUDGET = 3_000_000;
+
+/** 图片水印：存成 data URL（不透明的是 JPEG，带透明的是 WebP，浏览器不支持 WebP 编码时是 PNG）。 */
 export type Mark = { id: string; name: string; dataUrl: string; width: number; height: number };
 export type Preset = { id: string; name: string; createdAt: string; settings: MarkSettings };
 
@@ -20,7 +28,9 @@ const presetSchema = z.object({
   mark: markSchema.optional().catch(undefined),
 });
 
-const fileSchema = z.object({ app: z.literal("henji-watermark"), version: z.literal(1), presets: z.array(z.unknown()) });
+/** 第 2 版改了位移的含义，读第 1 版文件时换算。 */
+const FILE_VERSION = 2;
+const fileSchema = z.object({ app: z.literal("henji-watermark"), version: z.union([z.literal(1), z.literal(2)]), presets: z.array(z.unknown()) });
 
 /** 旧版水印工具（wmt 子域名）导出的预设：设置里直接带着图片的 data URL。 */
 const legacyPresetSchema = z.object({
@@ -51,7 +61,7 @@ export function createPreset(name: string, settings: MarkSettings, id: string, n
 export function exportPresets(presets: readonly Preset[], marks: Readonly<Record<string, Mark>>): string {
   return JSON.stringify({
     app: "henji-watermark",
-    version: 1,
+    version: FILE_VERSION,
     presets: presets.map((p) => {
       const mark = p.settings.markId ? marks[p.settings.markId] : undefined;
       return {
@@ -90,7 +100,8 @@ export function importPresets(text: string, newId: () => string): { presets: Pre
     for (const raw of file.data.presets) {
       const p = presetSchema.safeParse(raw);
       if (!p.success) continue;
-      const settings = parseMarkSettings(p.data.settings);
+      const parsed = parseMarkSettings(p.data.settings);
+      const settings = file.data.version < 2 ? migrateOffsetsV1(parsed) : parsed;
       settings.markId = p.data.mark ? addMark(p.data.mark) : null;
       presets.push({ id: newId(), name: p.data.name, createdAt: p.data.createdAt, settings });
     }
@@ -99,15 +110,18 @@ export function importPresets(text: string, newId: () => string): { presets: Pre
       const p = legacyPresetSchema.safeParse(raw);
       if (!p.success) continue;
       const old = p.data.settings;
-      const settings = parseMarkSettings({
-        ...old,
-        // 旧版的间隔是原图像素，换算不了，留空让它取默认值
-        spacingX: undefined,
-        spacingY: undefined,
-        position: old.position === "full-screen" ? "tile" : old.position,
-        font: legacyFont(old.fontFamily),
-        markId: null,
-      });
+      // 旧版工具的位移和本工具第 1 版是同一套含义
+      const settings = migrateOffsetsV1(
+        parseMarkSettings({
+          ...old,
+          // 旧版的间隔是原图像素，换算不了，留空让它取默认值
+          spacingX: undefined,
+          spacingY: undefined,
+          position: old.position === "full-screen" ? "tile" : old.position,
+          font: legacyFont(old.fontFamily),
+          markId: null,
+        }),
+      );
       const mark = markSchema.safeParse({ name: old.imageName, dataUrl: old.imageData, width: old.imageWidth, height: old.imageHeight });
       if (mark.success) settings.markId = addMark(mark.data);
       else if (settings.type === "image") settings.type = "text";
@@ -123,3 +137,10 @@ export function pruneMarks(marks: Readonly<Record<string, Mark>>, inUse: Iterabl
   const keep = new Set(inUse);
   return Object.fromEntries(Object.entries(marks).filter(([id]) => keep.has(id)));
 }
+
+/** 预设库序列化后的长度（字符），和存储里实际写进去的大小一致。 */
+export function librarySize(library: { marks: Readonly<Record<string, Mark>>; presets: readonly Preset[] }): number {
+  return JSON.stringify({ state: library, version: FILE_VERSION }).length;
+}
+
+export class LibraryFullError extends Error {}

@@ -49,7 +49,9 @@ export const SIZE_RANGE: Record<SizeUnit, { min: number; max: number }> = {
   px: { min: 8, max: 800 },
 };
 export const OPACITY_RANGE = { min: 0.1, max: 1 };
+/** 九宫格：在锚点基础上的偏移，按图片宽（水平）、高（垂直）的百分比，向右、向下为正。平铺：整张网格的平移，单位相同。 */
 export const OFFSET_RANGE = { min: -100, max: 100 };
+export const MAX_TEXT_LENGTH = 2000;
 /** 平铺间隔按水印自身尺寸的百分比算：同一套设置在大小不同的照片上疏密一样。 */
 export const SPACING_RANGE = { min: 0, max: 300 };
 export const ROTATION_RANGE = { min: -180, max: 180 };
@@ -85,7 +87,11 @@ const HEX = /^#[0-9a-f]{6}$/i;
 /** 读存储、导入预设都过一遍：缺字段、类型不对、超出范围的值换成默认，不让旧数据把界面弄坏。 */
 export const markSettingsSchema = z.object({
   type: z.enum(["text", "image"]).catch(FACTORY_MARK.type),
-  text: z.string().max(2000).catch(FACTORY_MARK.text),
+  // 超长时截断而不是整段换成默认：用户的文字比示例水印更接近他想要的
+  text: z
+    .string()
+    .transform((t) => t.slice(0, MAX_TEXT_LENGTH))
+    .catch(FACTORY_MARK.text),
   markId: z.string().nullable().catch(null),
   position: z.enum([...CELLS, "tile"]).catch(FACTORY_MARK.position),
   offsetX: clampNum(OFFSET_RANGE.min, OFFSET_RANGE.max, 0),
@@ -133,12 +139,24 @@ export function clampSize(size: number, unit: SizeUnit): number {
   return Math.min(r.max, Math.max(r.min, size));
 }
 
-/** 选九宫格的格子时把位移放到对应的边（±100）；选平铺时角度改成斜的，平铺一般都斜着放。 */
+/** 选九宫格的格子时偏移归零，水印落在锚点上；选平铺时角度改成斜的，平铺一般都斜着放。 */
 export function applyPosition(settings: MarkSettings, position: Position): MarkSettings {
   if (position === "tile") return { ...settings, position, rotation: TILE_ROTATION };
-  const offsetX = position.endsWith("left") ? -100 : position.endsWith("right") ? 100 : 0;
-  const offsetY = position.startsWith("top") ? 100 : position.startsWith("bottom") ? -100 : 0;
-  return { ...settings, position, offsetX, offsetY };
+  return { ...settings, position, offsetX: 0, offsetY: 0 };
+}
+
+/**
+ * 第 1 版存的位移：九宫格时 ±100 表示水印贴到图片边上（向上为正），选格子会把位移设成 ±100；平铺时是网格平移（也是向上为正）。
+ * 换成第 2 版的“在锚点基础上的偏移”（图片宽高的百分比，向右、向下为正）。
+ * 九宫格里不计水印自身大小近似换算：贴边的值正好变成 0，落在新锚点上；手动调过的值换算后位置大致不变。
+ */
+export function migrateOffsetsV1(s: MarkSettings): MarkSettings {
+  // `|| 0` 把 -0 换成 0，滑块上不显示“-0”
+  const clamp = (v: number) => Math.min(OFFSET_RANGE.max, Math.max(OFFSET_RANGE.min, v)) || 0;
+  if (s.position === "tile") return { ...s, offsetY: clamp(-s.offsetY) };
+  const anchorX = s.position.endsWith("left") ? -100 : s.position.endsWith("right") ? 100 : 0;
+  const anchorY = s.position.startsWith("top") ? 100 : s.position.startsWith("bottom") ? -100 : 0;
+  return { ...s, offsetX: clamp((s.offsetX - anchorX) / 2), offsetY: clamp(-(s.offsetY - anchorY) / 2) };
 }
 
 /** 文件名去掉扩展名，用作水印文字。 */

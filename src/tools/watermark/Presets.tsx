@@ -9,7 +9,7 @@ import { toast } from "~/ui/sonner";
 import { TextField } from "~/ui/text-field";
 import { Textarea } from "~/ui/textarea";
 import { deletePreset, importPresetText, loadPreset, savePreset } from "./actions";
-import { exportPresets, PresetImportError } from "./logic/presets";
+import { exportPresets, LibraryFullError, PresetImportError } from "./logic/presets";
 import { useLibrary } from "./store";
 
 function formatDate(iso: string) {
@@ -17,15 +17,21 @@ function formatDate(iso: string) {
   return Number.isNaN(d.getTime()) ? "" : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function importText(text: string): boolean {
+async function importText(text: string): Promise<boolean> {
   try {
-    const n = importPresetText(text);
+    const n = await importPresetText(text);
     toast.success(`已导入 ${n} 个预设`);
     return true;
   } catch (error) {
-    toast.error(error instanceof PresetImportError ? `${error.message}，换一个试试` : "导入失败，换一个试试");
+    if (error instanceof LibraryFullError) toast.error(`没导入：${error.message}`);
+    else toast.error(error instanceof PresetImportError ? `${error.message}，换一个试试` : "导入失败，换一个试试");
     return false;
   }
+}
+
+/** 存预设、撤销删除这类写预设库的操作出错时的提示。 */
+export function libraryError(error: unknown, what: string) {
+  toast.error(error instanceof LibraryFullError ? `${what}：${error.message}` : `${what}，再试一次`);
 }
 
 function SaveDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
@@ -39,10 +45,15 @@ function SaveDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open
           onSubmit={(e) => {
             e.preventDefault();
             if (!name.trim()) return;
-            savePreset(name);
-            toast.success(`已保存预设“${name.trim()}”`);
-            setName("");
+            const saved = name.trim();
             onOpenChange(false);
+            savePreset(saved).then(
+              () => {
+                toast.success(`已保存预设“${saved}”`);
+                setName("");
+              },
+              (error: unknown) => libraryError(error, "预设没存上"),
+            );
           }}
         >
           <TextField label="预设名称" value={name} onChange={setName} maxLength={60} autoFocus />
@@ -68,10 +79,11 @@ function PasteDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (ope
           disabled={!text.trim()}
           className="justify-self-end"
           onClick={() => {
-            if (importText(text)) {
+            void importText(text).then((ok) => {
+              if (!ok) return;
               setText("");
               onOpenChange(false);
-            }
+            });
           }}
         >
           导入
@@ -137,7 +149,7 @@ export function Presets() {
                 size="sm"
                 onClick={() => {
                   const undo = deletePreset(p.id);
-                  toast(`已删除“${p.name}”`, { action: { label: "撤销", onClick: undo } });
+                  toast(`已删除“${p.name}”`, { action: { label: "撤销", onClick: () => void undo().catch((error: unknown) => libraryError(error, "没撤销成功")) } });
                 }}
               />
             </li>
@@ -168,7 +180,7 @@ export function Presets() {
         onChange={async (e) => {
           const f = e.target.files?.[0];
           e.target.value = "";
-          if (f) importText(await f.text());
+          if (f) await importText(await f.text());
         }}
       />
       <SaveDialog open={saving} onOpenChange={setSaving} />

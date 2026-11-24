@@ -24,18 +24,28 @@ describe("字号", () => {
 });
 
 describe("单个水印的位置", () => {
-  it("位移 0 在正中，±100 贴边，向上为正", () => {
-    expect(singleCenter(1000, 500, 100, 50, 0, 0, 0)).toEqual({ x: 500, y: 250 });
-    expect(singleCenter(1000, 500, 100, 50, 0, -100, 100)).toEqual({ x: 50, y: 25 });
-    expect(singleCenter(1000, 500, 100, 50, 0, 100, -100)).toEqual({ x: 950, y: 475 });
+  // 1000 × 500 的图，安全边距是短边的 3%：15
+  it("居中格偏移 0 在正中；角上的格子离边留出安全边距", () => {
+    expect(singleCenter(1000, 500, 100, 50, 0, "center", 0, 0)).toEqual({ x: 500, y: 250 });
+    expect(singleCenter(1000, 500, 100, 50, 0, "top-left", 0, 0)).toEqual({ x: 65, y: 40 });
+    expect(singleCenter(1000, 500, 100, 50, 0, "bottom-right", 0, 0)).toEqual({ x: 935, y: 460 });
+    expect(singleCenter(1000, 500, 100, 50, 0, "bottom-center", 0, 0)).toEqual({ x: 500, y: 460 });
   });
-  it("旋转后按外接框贴边，整个水印留在图里", () => {
-    const c = singleCenter(1000, 500, 100, 100, Math.PI / 4, 100, 0);
+  it("偏移按图片宽高的百分比，向右、向下为正", () => {
+    expect(singleCenter(1000, 500, 100, 50, 0, "center", 10, 10)).toEqual({ x: 600, y: 300 });
+    expect(singleCenter(1000, 500, 100, 50, 0, "top-left", 5, 2)).toEqual({ x: 115, y: 50 });
+  });
+  it("偏移再大也整个留在图里", () => {
+    expect(singleCenter(1000, 500, 100, 50, 0, "bottom-right", 100, 100)).toEqual({ x: 950, y: 475 });
+    expect(singleCenter(1000, 500, 100, 50, 0, "top-left", -100, -100)).toEqual({ x: 50, y: 25 });
+  });
+  it("旋转后按外接框留边距", () => {
+    const c = singleCenter(1000, 500, 100, 100, Math.PI / 4, "middle-right", 0, 0);
     const half = (100 * Math.SQRT2) / 2;
-    expect(c.x).toBeCloseTo(1000 - half);
+    expect(c.x).toBeCloseTo(1000 - 15 - half);
   });
   it("水印比图还大时放正中", () => {
-    expect(singleCenter(100, 100, 300, 20, 0, 100, 0).x).toBe(50);
+    expect(singleCenter(100, 100, 300, 20, 0, "middle-right", 0, 0).x).toBe(50);
   });
 });
 
@@ -61,6 +71,10 @@ describe("平铺", () => {
     const ys = [...new Set(centers.map((c) => c.y))];
     const firstX = (y: number) => centers.find((c) => c.y === y)!.x;
     expect(firstX(ys[1]!) - firstX(ys[0]!)).toBe(100);
+  });
+  it("向下为正：位移让网格往下挪", () => {
+    const at = (offsetY: number) => Math.min(...tileCenters(1000, 500, 100, 50, 100, 100, 0, offsetY).map((c) => c.y).filter((y) => y >= 0));
+    expect(at(10)).toBeCloseTo(at(0) + 50);
   });
   it("位移再大也不会留出空白", () => {
     for (const offset of [-100, -37, 0, 55, 100]) {

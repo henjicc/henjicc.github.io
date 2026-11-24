@@ -4,7 +4,7 @@ import { useIsMobile } from "~/shell/media";
 import { Button } from "~/ui/button";
 import { cn } from "~/ui/lib/utils";
 import { Tag } from "~/ui/tag";
-import { clickImage, enterSelectMode, exitSelectMode, removeImages, resetToDefaults, syncToSelected, targets, toggleSelectAll } from "./actions";
+import { clickImage, enterSelectMode, exitSelectMode, removeImages, syncToSelected, targets, toggleSelectAll } from "./actions";
 import { fitPixels } from "./logic/output";
 import type { Mark } from "./logic/presets";
 import type { MarkSettings, SizeUnit } from "./logic/settings";
@@ -203,9 +203,6 @@ function Thumbs() {
             同步设置
           </Button>
         ) : null}
-        <Button size="sm" variant="ghost" onClick={resetToDefaults}>
-          恢复默认
-        </Button>
         <Button size="sm" variant="ghost" onClick={() => removeImages(targets().map((im) => im.id))}>
           移除
         </Button>

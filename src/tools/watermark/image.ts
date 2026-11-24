@@ -1,6 +1,7 @@
 // 图片的解码和缩放（浏览器侧）。HEIC 解码器按需加载，它自己在 Worker 里解码，不卡界面。
+import { encodeWithinBudget, hasTransparency } from "./logic/mark-encode";
 import { fitPixels, isHeic } from "./logic/output";
-import type { Mark } from "./logic/presets";
+import { MARK_BUDGET, type Mark } from "./logic/presets";
 
 /** 手机和 TOY：iOS WebKit 画布面积上限约 1677 万像素，超过时画出来是空白。 */
 const MOBILE_MAX_PIXELS = 16_777_216;
@@ -97,11 +98,13 @@ export async function readImage(file: File): Promise<{ decodable: Blob; width: n
 
 /**
  * 按目标尺寸解码。缩小时优先让浏览器在解码时缩放（大图在手机上整张解码可能直接失败），不支持再画到画布上缩。
- * 返回值用完要调用 release。
+ * width、height 是摆正方向后的尺寸（readImage 量出来的），所以解码时必须按 EXIF 方向转正：
+ * 不转的话手机竖拍的照片会被横着拉伸。imageOrientation 的默认值在旧版浏览器里是 "none"，要显式写。
+ * 退回路径用的 <img> 在各浏览器里画到画布时默认按 EXIF 摆正。返回值用完要调用 release。
  */
 export async function decodeAt(blob: Blob, width: number, height: number): Promise<{ source: CanvasImageSource; release: () => void }> {
   try {
-    const bitmap = await createImageBitmap(blob, { resizeWidth: width, resizeHeight: height, resizeQuality: "high" });
+    const bitmap = await createImageBitmap(blob, { imageOrientation: "from-image", resizeWidth: width, resizeHeight: height, resizeQuality: "high" });
     if (bitmap.width === width && bitmap.height === height) return { source: bitmap, release: () => bitmap.close() };
     const c = canvas(width, height);
     c.getContext("2d")?.drawImage(bitmap, 0, 0, width, height);
@@ -115,15 +118,49 @@ export async function decodeAt(blob: Blob, width: number, height: number): Promi
   }
 }
 
-/** 选好的水印图片转成 PNG data URL（保留透明），最长边不超过 1200。SVG 没有固有尺寸时按 512 画。 */
+/**
+ * 把已经解码的水印图片画到不超过 1200 的尺寸，再按 encodeWithinBudget 的策略编码：
+ * 每张约 300KB 以内，几张预设才不会把本机存储撑满。
+ */
+async function encodeMark(img: HTMLImageElement, opaqueHint: boolean): Promise<{ dataUrl: string; width: number; height: number }> {
+  const size = fitPixels(img.naturalWidth || 512, img.naturalHeight || 512, Infinity, MARK_MAX_SIDE);
+  const c = canvas(size.width, size.height);
+  const ctx = c.getContext("2d", { willReadFrequently: true });
+  if (!ctx) throw new DecodeError("画不出来");
+  ctx.drawImage(img, 0, 0, size.width, size.height);
+  const opaque = opaqueHint || !hasTransparency(ctx.getImageData(0, 0, size.width, size.height).data);
+  let out = { width: size.width, height: size.height };
+  const r = await encodeWithinBudget((mime, quality, scale) => {
+    const w = Math.max(1, Math.round(size.width * scale));
+    const h = Math.max(1, Math.round(size.height * scale));
+    out = { width: w, height: h };
+    if (scale === 1) return c.toDataURL(mime, quality);
+    const small = canvas(w, h);
+    const sctx = small.getContext("2d");
+    if (sctx) {
+      sctx.imageSmoothingQuality = "high";
+      sctx.drawImage(c, 0, 0, w, h);
+    }
+    const url = small.toDataURL(mime, quality);
+    small.width = 0;
+    return url;
+  }, opaque);
+  c.width = 0;
+  return { dataUrl: r.dataUrl, ...out };
+}
+
+/** 选好的水印图片编码成 data URL。SVG 没有固有尺寸时按 512 画。 */
 export async function readMarkImage(file: File, id: string): Promise<Mark> {
   const img = await withObjectUrl(file, loadImage);
-  const w0 = img.naturalWidth || 512;
-  const h0 = img.naturalHeight || 512;
-  const size = fitPixels(w0, h0, Infinity, MARK_MAX_SIDE);
-  const c = canvas(size.width, size.height);
-  c.getContext("2d")?.drawImage(img, 0, 0, size.width, size.height);
-  return { id, name: file.name, dataUrl: c.toDataURL("image/png"), width: size.width, height: size.height };
+  const encoded = await encodeMark(img, /^image\/jpe?g$/i.test(file.type));
+  return { id, name: file.name, ...encoded };
+}
+
+/** 导入的预设里的水印图片可能很大（旧版工具存的是原图 PNG）：超过预算或 1200 的才重新编码，已经够小的原样保留。 */
+export async function compactMark(mark: Mark): Promise<Mark> {
+  if (mark.dataUrl.length <= MARK_BUDGET && Math.max(mark.width, mark.height) <= MARK_MAX_SIDE) return mark;
+  const img = await loadImage(mark.dataUrl);
+  return { ...mark, ...(await encodeMark(img, /^data:image\/jpe?g/i.test(mark.dataUrl))) };
 }
 
 const markCache = new Map<string, Promise<HTMLImageElement>>();

@@ -1,9 +1,9 @@
 // 改状态的操作：界面只调这些，不直接拼 store 的结构。
-import { createPreset, importPresets, pruneMarks, type Mark } from "./logic/presets";
+import { createPreset, importPresets, LIBRARY_BUDGET, LibraryFullError, librarySize, pruneMarks, type Mark, type Preset } from "./logic/presets";
 import { clickSelect, targetIds } from "./logic/selection";
-import { clampSize, FACTORY_APP, filenameAsText, type MarkSettings, type SizeUnit } from "./logic/settings";
-import { readImage, readMarkImage } from "./image";
-import { useApp, useDraft, useLibrary, useSession, type ImageItem } from "./store";
+import { clampSize, FACTORY_APP, filenameAsText, type AppSettings, type MarkSettings, type SizeUnit } from "./logic/settings";
+import { compactMark, readImage, readMarkImage } from "./image";
+import { libraryWritten, useApp, useDraft, useLibrary, useSession, type ImageItem } from "./store";
 
 export const newId = () => crypto.randomUUID();
 
@@ -121,47 +121,80 @@ export function syncToSelected(): number {
   return ids.length;
 }
 
-/** 恢复成默认设置（“设为默认”存下的那套）：有多选时作用于选中的图，否则当前图。 */
-export function resetToDefaults() {
+/** 恢复成默认设置（“设为默认”存下的那套）：有多选时作用于选中的图，否则当前图。返回改了几张。 */
+export function resetToDefaults(): number {
   const defaults = useApp.getState().defaults;
   const ids = targets().map((im) => im.id);
   const s = useSession.getState();
   useSession.setState({ images: s.images.map((im) => (ids.includes(im.id) ? { ...im, settings: defaults } : im)) });
   if (!s.currentId || ids.includes(s.currentId)) useDraft.setState({ current: defaults });
+  return ids.length;
 }
 
 export function saveAsDefaults() {
   useApp.setState({ defaults: useDraft.getState().current });
 }
 
-export function factoryReset() {
-  useApp.setState({ ...FACTORY_APP });
+/** 默认设置和偏好都还是出厂值时，“恢复出厂设置”没有意义。 */
+export function isFactoryApp(app: AppSettings): boolean {
+  return JSON.stringify(app) === JSON.stringify(FACTORY_APP);
 }
 
-function marksInUse(): (string | null)[] {
+/** 恢复出厂设置：默认水印和偏好回到出厂值，并把出厂水印用到 resetToDefaults 作用的那几张图上。返回撤销函数。 */
+export function factoryReset(): () => void {
+  const app = useApp.getState();
+  const draft = useDraft.getState().current;
+  const images = useSession.getState().images;
+  useApp.setState({ ...FACTORY_APP });
+  resetToDefaults();
+  return () => {
+    useApp.setState(app);
+    useDraft.setState({ current: draft });
+    const byId = new Map(images.map((im) => [im.id, im.settings]));
+    useSession.setState((s) => ({ images: s.images.map((im) => ({ ...im, settings: byId.get(im.id) ?? im.settings })) }));
+  };
+}
+
+function marksInUse(presets: readonly Preset[] = useLibrary.getState().presets): (string | null)[] {
   return [
     useDraft.getState().current.markId,
     useApp.getState().defaults.markId,
     ...useSession.getState().images.map((im) => im.settings.markId),
-    ...useLibrary.getState().presets.map((p) => p.settings.markId),
+    ...presets.map((p) => p.settings.markId),
   ];
 }
 
-function addMarks(added: readonly Mark[]) {
-  const marks = { ...useLibrary.getState().marks };
-  for (const m of added) marks[m.id] = m;
-  useLibrary.setState({ marks: pruneMarks(marks, [...marksInUse(), ...added.map((m) => m.id)]) });
+/**
+ * 改预设库都走这里：先按整库预算检查，写进去之后确认存储里真的有了。
+ * 超预算或写不进去时抛 LibraryFullError，内存里的库也退回原样，界面不会显示一个重载后就没了的预设。
+ */
+async function commitLibrary(change: (library: { marks: Record<string, Mark>; presets: Preset[] }) => { marks: Record<string, Mark>; presets: Preset[] }) {
+  const before = useLibrary.getState();
+  const next = change({ marks: before.marks, presets: before.presets });
+  if (librarySize(next) > LIBRARY_BUDGET && librarySize(next) > librarySize(before)) {
+    throw new LibraryFullError(`预设和水印图片加起来不能超过 ${LIBRARY_BUDGET / 1_000_000}MB，删掉几个带图片的预设再试`);
+  }
+  useLibrary.setState(next);
+  if (await libraryWritten()) return;
+  useLibrary.setState({ marks: before.marks, presets: before.presets });
+  throw new LibraryFullError("浏览器的本机存储满了，没存上。删掉几个带图片的预设再试");
+}
+
+function withMarks(marks: Readonly<Record<string, Mark>>, added: readonly Mark[], presets: readonly Preset[]): Record<string, Mark> {
+  const all = { ...marks };
+  for (const m of added) all[m.id] = m;
+  return pruneMarks(all, [...marksInUse(presets), ...added.map((m) => m.id)]);
 }
 
 export async function chooseMarkImage(file: File) {
   const mark = await readMarkImage(file, newId());
-  addMarks([mark]);
+  await commitLibrary((l) => ({ presets: l.presets, marks: withMarks(l.marks, [mark], l.presets) }));
   patchSettings({ type: "image", markId: mark.id });
 }
 
-export function savePreset(name: string) {
+export async function savePreset(name: string) {
   const preset = createPreset(name, useDraft.getState().current, newId(), new Date());
-  useLibrary.setState((l) => ({ presets: [...l.presets, preset] }));
+  await commitLibrary((l) => ({ marks: l.marks, presets: [...l.presets, preset] }));
 }
 
 export function loadPreset(id: string) {
@@ -169,16 +202,33 @@ export function loadPreset(id: string) {
   if (preset) updateSettings({ ...preset.settings, size: clampSize(preset.settings.size, useApp.getState().unit) });
 }
 
-export function deletePreset(id: string) {
+/**
+ * 删除预设，返回撤销函数。撤销窗口里如果加了别的水印图片，没人用的图片（包括这个预设的）会被清理掉，
+ * 所以撤销时把这个预设的图片一起放回去。
+ */
+export function deletePreset(id: string): () => Promise<void> {
   const before = useLibrary.getState();
+  const index = before.presets.findIndex((p) => p.id === id);
+  const preset = before.presets[index];
+  const mark = preset?.settings.markId ? before.marks[preset.settings.markId] : undefined;
   useLibrary.setState({ presets: before.presets.filter((p) => p.id !== id) });
-  // 撤销时整个放回原位；水印图片等撤销窗口过了、下次加图片时再清理
-  return () => useLibrary.setState({ presets: before.presets });
+  return async () => {
+    if (!preset) return;
+    await commitLibrary((l) => {
+      if (l.presets.some((p) => p.id === id)) return l;
+      const presets = [...l.presets];
+      presets.splice(Math.min(index, presets.length), 0, preset);
+      return { presets, marks: mark ? { ...l.marks, [mark.id]: mark } : l.marks };
+    });
+  };
 }
 
-export function importPresetText(text: string): number {
-  const { presets, marks } = importPresets(text, newId);
-  useLibrary.setState((l) => ({ presets: [...l.presets, ...presets] }));
-  addMarks(marks);
-  return presets.length;
+export async function importPresetText(text: string): Promise<number> {
+  const parsed = importPresets(text, newId);
+  const marks = await Promise.all(parsed.marks.map(compactMark));
+  await commitLibrary((l) => {
+    const presets = [...l.presets, ...parsed.presets];
+    return { presets, marks: withMarks(l.marks, marks, presets) };
+  });
+  return parsed.presets.length;
 }

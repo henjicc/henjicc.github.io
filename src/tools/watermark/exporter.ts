@@ -1,9 +1,9 @@
 // 导出：每张图都用同一个绘制方案在原尺寸（或画布上限以内）重画一遍。
-// 网站：单张按设置的格式和质量编码（JPEG 带上原图的 EXIF）后下载，多张打成 ZIP；
-// TOY：逐张存进相册（平台层统一转成 JPEG），存完由调用方弹一次轻提示。
+// 网站：单张按设置的格式和质量编码（JPEG 带上原图的 EXIF）后下载，多张边编码边流式打成 ZIP；
+// TOY：逐张各自存进相册（平台层统一转成 JPEG），一张失败不影响其他张，存完由调用方按结果弹一次轻提示。
 import { platform } from "~/platform";
 import { insertExif, heifExif, jpegExif, patchExif } from "./logic/exif";
-import { chooseOutputFormat, fitPixels, isHeic, outputFileName, uniqueNames, zipFileName } from "./logic/output";
+import { chooseOutputFormat, fitPixels, isHeic, outputFileName, zipFileName } from "./logic/output";
 import type { Mark } from "./logic/presets";
 import type { AppSettings } from "./logic/settings";
 import { decodeAt, exportLimits, loadMark } from "./image";
@@ -63,9 +63,46 @@ async function encode(item: ImageItem, app: AppSettings, marks: Readonly<Record<
 
 export type ExportOutcome =
   | { kind: "downloaded"; count: number; scaled: number }
-  | { kind: "saved"; count: number; scaled: number }
-  /** TOY 外没有 SDK：平台层显示了第 shownAt 张让用户长按保存，后面的没再处理。 */
-  | { kind: "shown"; count: number; scaled: number };
+  /**
+   * TOY：saved 是存进相册的图，failed 是没存上的（包括出错后没再处理的）。
+   * shown 为 true 时平台层存不了相册，已经把 failed 的第一张显示出来让用户长按保存，后面的没再处理。
+   */
+  | { kind: "album"; saved: string[]; failed: string[]; shown: boolean; error?: unknown; scaled: number };
+
+/** 图片类型选了“图片”却没有可用的水印图片：这些图导出去不会带水印。 */
+export function missingMark(items: readonly ImageItem[], marks: Readonly<Record<string, Mark>>): ImageItem[] {
+  return items.filter((im) => im.settings.type === "image" && !(im.settings.markId && marks[im.settings.markId]));
+}
+
+async function saveToAlbum(items: readonly ImageItem[], app: AppSettings, marks: Readonly<Record<string, Mark>>, onProgress: (done: number) => void): Promise<ExportOutcome> {
+  const saved: string[] = [];
+  const failed: string[] = [];
+  let scaled = 0;
+  let error: unknown;
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i]!;
+    try {
+      const r = await renderFull(item, app, marks, true);
+      if (r.scaled) scaled++;
+      try {
+        const result = await platform.saveImage(r.canvas, outputFileName(item.name, "jpg"));
+        if (result === "shown") {
+          // 平台层已经弹出这张让用户长按保存；再往下存会一张张叠上去，停在这里，剩下的交给“重试”
+          failed.push(...items.slice(i).map((im) => im.id));
+          return { kind: "album", saved, failed, shown: true, scaled };
+        }
+        saved.push(item.id);
+      } finally {
+        r.canvas.width = 0;
+      }
+    } catch (e) {
+      error ??= e;
+      failed.push(item.id);
+    }
+    onProgress(i + 1);
+  }
+  return { kind: "album", saved, failed, shown: false, error, scaled };
+}
 
 export async function exportImages(
   items: readonly ImageItem[],
@@ -73,19 +110,7 @@ export async function exportImages(
   marks: Readonly<Record<string, Mark>>,
   onProgress: (done: number) => void,
 ): Promise<ExportOutcome> {
-  let scaled = 0;
-  if (platform.kind === "toy") {
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i]!;
-      const r = await renderFull(item, app, marks, true);
-      if (r.scaled) scaled++;
-      const result = await platform.saveImage(r.canvas, outputFileName(item.name, "jpg"));
-      r.canvas.width = 0;
-      onProgress(i + 1);
-      if (result === "shown") return { kind: "shown", count: i + 1, scaled };
-    }
-    return { kind: "saved", count: items.length, scaled };
-  }
+  if (platform.kind === "toy") return saveToAlbum(items, app, marks, onProgress);
 
   if (items.length === 1) {
     const one = await encode(items[0]!, app, marks);
@@ -94,17 +119,15 @@ export async function exportImages(
     return { kind: "downloaded", count: 1, scaled: one.scaled ? 1 : 0 };
   }
 
-  const files: { name: string; data: Uint8Array }[] = [];
+  const { createZipStream } = await import("./zip");
+  const zip = createZipStream();
+  let scaled = 0;
   for (let i = 0; i < items.length; i++) {
     const one = await encode(items[i]!, app, marks);
     if (one.scaled) scaled++;
-    files.push({ name: one.filename, data: new Uint8Array(await one.blob.arrayBuffer()) });
+    await zip.add(one.filename, one.blob);
     onProgress(i + 1);
   }
-  const { zipSync } = await import("fflate");
-  const names = uniqueNames(files.map((f) => f.name));
-  // 图片本身已经压缩过，再压一遍几乎不变小，只存储不压缩
-  const zipped = zipSync(Object.fromEntries(files.map((f, i) => [names[i]!, [f.data, { level: 0 }]])));
-  await platform.saveFile(new Blob([zipped as Uint8Array<ArrayBuffer>], { type: "application/zip" }), zipFileName(new Date()));
+  await platform.saveFile(await zip.finish(), zipFileName(new Date()));
   return { kind: "downloaded", count: items.length, scaled };
 }

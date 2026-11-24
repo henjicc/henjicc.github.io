@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ApiError, checkBaseUrl, combineSignals,describeError, isValidApiKey, normalizeBaseUrl, redactKey, requestChat, testConnection, TimeoutError } from "./api";
+import { ApiError, checkBaseUrl, combineSignals, describeError, isValidApiKey, normalizeBaseUrl, redactKey, requestChat, testConnection, TimeoutError } from "./api";
 
 const config = { baseUrl: "https://llm.example.test/v1/", model: " demo-model " };
 

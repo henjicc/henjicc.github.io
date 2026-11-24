@@ -61,7 +61,7 @@ function keyStorage(): PersistStorage<Keys> {
   return {
     getItem: async (name) => {
       const value = await base.getItem(name);
-      remembered = Boolean(value?.state.remember);
+      remembered = Boolean(value?.state?.remember);
       return value;
     },
     setItem: (name, value) => {

@@ -4,7 +4,11 @@
 // 每行必须保持 `defineTool(<meta>, () => import("./<id>/Tool"))` 的写法：TOY 打包时 vite.toy.config.ts
 // 按同样的约定重新生成这个文件，只放进选中的工具，没选中的工具不会进包。
 // 这里只用相对路径导入：react-router.config.ts 在 Node 里加载它，那里没有 ~ 别名。
+import batchText from "./batch-text/meta";
 import { defineTool } from "./define";
 import randomPicker from "./random-picker/meta";
 
-export const tools = [defineTool(randomPicker, () => import("./random-picker/Tool"))];
+export const tools = [
+  defineTool(randomPicker, () => import("./random-picker/Tool")),
+  defineTool(batchText, () => import("./batch-text/Tool")),
+];

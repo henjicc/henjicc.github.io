@@ -115,6 +115,18 @@ export const FACTORY_APP = {
 };
 export type AppSettings = typeof FACTORY_APP;
 
+const appSettingsSchema = z.object({
+  defaults: z.unknown().optional().transform(parseMarkSettings),
+  unit: z.enum(["percent", "px"]).catch(FACTORY_APP.unit),
+  useFilename: z.boolean().catch(FACTORY_APP.useFilename),
+  format: z.enum(["auto", "jpeg", "png", "webp"]).catch(FACTORY_APP.format),
+  quality: clampNum(0.1, 1, FACTORY_APP.quality),
+});
+
+export function parseAppSettings(value: unknown): AppSettings {
+  return appSettingsSchema.parse(value && typeof value === "object" ? value : {}) as AppSettings;
+}
+
 /** 单位变了以后大小可能超出新单位的范围，夹回去。 */
 export function clampSize(size: number, unit: SizeUnit): number {
   const r = SIZE_RANGE[unit];

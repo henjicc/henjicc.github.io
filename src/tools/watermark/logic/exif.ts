@@ -179,9 +179,11 @@ function isTiff(t: Uint8Array): boolean {
 type Entry = { at: number; tag: number; type: number; count: number };
 
 class Tiff {
+  readonly bytes: Uint8Array;
   readonly view: DataView;
   readonly le: boolean;
-  constructor(readonly bytes: Uint8Array) {
+  constructor(bytes: Uint8Array) {
+    this.bytes = bytes;
     this.view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     this.le = bytes[0] === 0x49;
   }

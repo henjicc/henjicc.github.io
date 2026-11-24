@@ -6,5 +6,9 @@
 // 这里只用相对路径导入：react-router.config.ts 在 Node 里加载它，那里没有 ~ 别名。
 import { defineTool } from "./define";
 import randomPicker from "./random-picker/meta";
+import watermark from "./watermark/meta";
 
-export const tools = [defineTool(randomPicker, () => import("./random-picker/Tool"))];
+export const tools = [
+  defineTool(watermark, () => import("./watermark/Tool")),
+  defineTool(randomPicker, () => import("./random-picker/Tool")),
+];

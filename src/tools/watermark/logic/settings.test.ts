@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyPosition, clampSize, FACTORY_MARK, filenameAsText, fontStack, parseMarkSettings, summarize } from "./settings";
+import { applyPosition, clampSize, FACTORY_APP, FACTORY_MARK, filenameAsText, fontStack, parseAppSettings, parseMarkSettings, summarize } from "./settings";
 
 describe("位置", () => {
   it("九宫格把位移放到对应的边", () => {
@@ -19,6 +19,18 @@ describe("读取存过的设置", () => {
   });
   it("空值也能读", () => {
     expect(parseMarkSettings(undefined)).toEqual(FACTORY_MARK);
+    expect(parseAppSettings(null)).toEqual(FACTORY_APP);
+  });
+  it("应用设置里的坏值换成默认", () => {
+    expect(parseAppSettings({ unit: "em", quality: 3, format: "gif", defaults: { size: 30 } })).toEqual({
+      ...FACTORY_APP,
+      quality: 1,
+      defaults: { ...FACTORY_MARK, size: 30 },
+    });
+  });
+  it("应用设置存进 TOY 云存储，序列化后不超过 1KB", () => {
+    const json = JSON.stringify({ state: { ...FACTORY_APP, defaults: { ...FACTORY_MARK, text: "@".repeat(200), font: "local:Some Long Font Family" } }, version: 1 });
+    expect(new TextEncoder().encode(json).length).toBeLessThan(1024);
   });
 });
 

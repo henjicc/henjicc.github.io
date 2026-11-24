@@ -60,6 +60,19 @@ describe("预设导入导出", () => {
     expect(importPresets(JSON.stringify(legacy), ids()).presets[0]!.settings.type).toBe("text");
   });
 
+  it("第 1 版文件里的大图片水印按它的宽高比换算位移", () => {
+    // 宽 60%、宽高比 2:1 的图片水印，在左上格里拖回了 0（第 1 版画在正中）
+    const v1 = {
+      app: "henji-watermark",
+      version: 1,
+      presets: [{ name: "大图", settings: { ...FACTORY_MARK, type: "image", size: 60, position: "top-left", offsetX: 0, offsetY: 0 }, mark: { ...mark, width: 600, height: 300 } }],
+    };
+    const [p] = importPresets(JSON.stringify(v1), ids()).presets;
+    // 水平 (0 + 100) / 2 × (1 − 0.6)；垂直外接框按 3:2 的图占 0.6 × 0.5 × 1.5 = 0.45
+    expect(p!.settings.offsetX).toBeCloseTo(20);
+    expect(p!.settings.offsetY).toBeCloseTo(27.5);
+  });
+
   it("读不懂的内容报错", () => {
     expect(() => importPresets("not json", ids())).toThrow(PresetImportError);
     expect(() => importPresets('{"a":1}', ids())).toThrow("不是预设文件");

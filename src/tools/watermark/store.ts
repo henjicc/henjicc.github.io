@@ -3,14 +3,27 @@ import { persist, type PersistStorage } from "zustand/middleware";
 import { toolStorage } from "~/shell/tool/persist";
 import type { Mark, Preset } from "./logic/presets";
 import type { Selection } from "./logic/selection";
-import { FACTORY_APP, FACTORY_MARK, migrateOffsetsV1, parseAppSettings, parseMarkSettings, type AppSettings, type MarkSettings } from "./logic/settings";
+import {
+  estimateV1Box,
+  FACTORY_APP,
+  FACTORY_MARK,
+  migrateOffsetsV1,
+  parseAppSettings,
+  parseMarkSettings,
+  type AppSettings,
+  type MarkSettings,
+  type SizeUnit,
+} from "./logic/settings";
 
 /** 第 2 版改了位移的含义（见 migrateOffsetsV1），三个存储都要换算存过的水印设置。 */
 const VERSION = 2;
 
-function migrateMark(value: unknown, version: number): MarkSettings {
+/** 换算要估水印在图上占多大：知道单位和水印图片的宽高时传进来，不知道时按百分比单位、方形图片估。 */
+function migrateMark(value: unknown, version: number, hints: { unit?: SizeUnit; mark?: { width: number; height: number } } = {}): MarkSettings {
   const s = parseMarkSettings(value);
-  return version < 2 ? migrateOffsetsV1(s) : s;
+  if (version >= 2) return s;
+  const markAspect = hints.mark && hints.mark.width > 0 ? hints.mark.height / hints.mark.width : undefined;
+  return migrateOffsetsV1(s, estimateV1Box(s, { unit: hints.unit, markAspect }));
 }
 import meta from "./meta";
 
@@ -22,7 +35,7 @@ export const useApp = create<AppSettings>()(
     storage: toolStorage<AppSettings>(meta.id, "settings"),
     migrate: (persisted, version) => {
       const p = (persisted ?? {}) as Partial<AppSettings>;
-      return { ...p, defaults: migrateMark(p.defaults, version) } as AppSettings;
+      return { ...p, defaults: migrateMark(p.defaults, version, { unit: p.unit === "px" ? "px" : "percent" }) } as AppSettings;
     },
     merge: (persisted, current) => ({ ...current, ...parseAppSettings(persisted) }),
   }),
@@ -81,7 +94,15 @@ export const useLibrary = create<Library>()(
     migrate: (persisted, version) => {
       const p = (persisted ?? {}) as Partial<Library>;
       if (!Array.isArray(p.presets)) return p as Library;
-      return { ...p, presets: p.presets.map((x) => (x && typeof x === "object" ? { ...x, settings: migrateMark(x.settings, version) } : x)) } as Library;
+      const marks = (p.marks && typeof p.marks === "object" ? p.marks : {}) as Record<string, Mark | undefined>;
+      const markOf = (settings: unknown) => {
+        const id = (settings as { markId?: unknown } | null | undefined)?.markId;
+        return typeof id === "string" ? marks[id] : undefined;
+      };
+      return {
+        ...p,
+        presets: p.presets.map((x) => (x && typeof x === "object" ? { ...x, settings: migrateMark(x.settings, version, { mark: markOf(x.settings) }) } : x)),
+      } as Library;
     },
     merge: (persisted, current) => {
       const p = persisted as Partial<Library> | undefined;

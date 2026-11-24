@@ -145,18 +145,64 @@ export function applyPosition(settings: MarkSettings, position: Position): MarkS
   return { ...settings, position, offsetX: 0, offsetY: 0 };
 }
 
+/** 水印（转过角度后的）外接框占图片宽、高的比例。 */
+export type BoxFraction = { width: number; height: number };
+
 /**
- * 第 1 版存的位移：九宫格时 ±100 表示水印贴到图片边上（向上为正），选格子会把位移设成 ±100；平铺时是网格平移（也是向上为正）。
- * 换成第 2 版的“在锚点基础上的偏移”（图片宽高的百分比，向右、向下为正）。
- * 九宫格里不计水印自身大小近似换算：贴边的值正好变成 0，落在新锚点上；手动调过的值换算后位置大致不变。
+ * 存下的设置不绑定某张图，换算时只能假定一个图片宽高比；按最常见的 3:2 横图算。
+ * 只影响垂直方向的换算，而且文字水印一般很扁，偏差很小。
  */
-export function migrateOffsetsV1(s: MarkSettings): MarkSettings {
+const V1_ASSUMED_ASPECT = 3 / 2;
+
+/** 一行文字按字宽估算的宽度（以字号为单位）：全角字约 1，其他约 0.55。真正的宽度要等有了字体和画布才量得出。 */
+function estimateEm(line: string): number {
+  let em = 0;
+  for (const ch of line) em += /[⺀-￯]/.test(ch) ? 1 : 0.55;
+  return em;
+}
+
+/**
+ * 估算第 1 版画这个水印时外接框占图片的比例。百分比单位下宽度就是 size%（图片水印的宽、文字第一行的宽），
+ * 高度由图片水印的宽高比（markAspect = 高 / 宽，不知道时按方形）或文字的行数和字数估出。
+ * 像素单位下水印占多大取决于图片尺寸，换算时不知道，按 0 处理（退回不计水印大小的换算）。
+ */
+export function estimateV1Box(s: MarkSettings, { unit = "percent", markAspect }: { unit?: SizeUnit; markAspect?: number } = {}): BoxFraction {
+  if (unit === "px" || s.size > SIZE_RANGE.percent.max) return { width: 0, height: 0 };
+  const first = s.size / 100;
+  let w = first;
+  let h: number;
+  if (s.type === "image") {
+    h = first * (markAspect && Number.isFinite(markAspect) && markAspect > 0 ? markAspect : 1);
+  } else {
+    const lines = s.text.split("\n");
+    const firstEm = estimateEm(lines[0] || " ") || 1;
+    w = (first * Math.max(...lines.map(estimateEm))) / firstEm;
+    h = (first * lines.length * 1.2) / firstEm;
+  }
+  // w、h 都以图片宽度为单位；转过之后取外接框，高度再换成以图片高度为单位
+  const r = (s.rotation * Math.PI) / 180;
+  const sin = Math.abs(Math.sin(r));
+  const cos = Math.abs(Math.cos(r));
+  return { width: Math.min(1, w * cos + h * sin), height: Math.min(1, (w * sin + h * cos) * V1_ASSUMED_ASPECT) };
+}
+
+/**
+ * 第 1 版存的位移：九宫格时水印中心在 图片中心 + 位移% × (图片边长 − 外接框边长) / 2，±100 表示贴到图片边上（向上为正），
+ * 选格子会把位移设成 ±100；平铺时是网格平移（也是向上为正）。换成第 2 版的“在锚点基础上的偏移”（图片宽高的百分比，向右、向下为正）。
+ * 第 2 版的锚点已经让出半个外接框，所以要把第 1 版的位移按 (1 − 外接框比例) 缩小，否则大水印会偏出约半个框。
+ * 第 2 版角上的锚点另外留了短边 3% 的安全边距，这里有意不抵消：贴边的值正好变成 0，落在新锚点上；手动调过的最多差这点边距。
+ */
+export function migrateOffsetsV1(s: MarkSettings, box: BoxFraction = estimateV1Box(s)): MarkSettings {
   // `|| 0` 把 -0 换成 0，滑块上不显示“-0”
   const clamp = (v: number) => Math.min(OFFSET_RANGE.max, Math.max(OFFSET_RANGE.min, v)) || 0;
   if (s.position === "tile") return { ...s, offsetY: clamp(-s.offsetY) };
   const anchorX = s.position.endsWith("left") ? -100 : s.position.endsWith("right") ? 100 : 0;
   const anchorY = s.position.startsWith("top") ? 100 : s.position.startsWith("bottom") ? -100 : 0;
-  return { ...s, offsetX: clamp((s.offsetX - anchorX) / 2), offsetY: clamp(-(s.offsetY - anchorY) / 2) };
+  return {
+    ...s,
+    offsetX: clamp(((s.offsetX - anchorX) / 2) * (1 - box.width)),
+    offsetY: clamp((-(s.offsetY - anchorY) / 2) * (1 - box.height)),
+  };
 }
 
 /** 文件名去掉扩展名，用作水印文字。 */

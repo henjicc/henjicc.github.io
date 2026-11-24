@@ -1,6 +1,6 @@
 // 预设和水印图片的数据结构，以及预设的导入导出（文件或“预设代码”是同一段 JSON）。
 import { z } from "zod";
-import { FACTORY_MARK, migrateOffsetsV1, parseMarkSettings, type MarkSettings } from "./settings";
+import { estimateV1Box, FACTORY_MARK, migrateOffsetsV1,parseMarkSettings, type MarkSettings } from "./settings";
 
 /**
  * 每张水印图片 data URL 的目标长度（字符）。图片和预设整个存在一个 localStorage 键里，
@@ -101,7 +101,8 @@ export function importPresets(text: string, newId: () => string): { presets: Pre
       const p = presetSchema.safeParse(raw);
       if (!p.success) continue;
       const parsed = parseMarkSettings(p.data.settings);
-      const settings = file.data.version < 2 ? migrateOffsetsV1(parsed) : parsed;
+      const mark = p.data.mark;
+      const settings = file.data.version < 2 ? migrateOffsetsV1(parsed, estimateV1Box(parsed, { markAspect: mark && mark.height / mark.width })) : parsed;
       settings.markId = p.data.mark ? addMark(p.data.mark) : null;
       presets.push({ id: newId(), name: p.data.name, createdAt: p.data.createdAt, settings });
     }
@@ -111,17 +112,17 @@ export function importPresets(text: string, newId: () => string): { presets: Pre
       if (!p.success) continue;
       const old = p.data.settings;
       // 旧版工具的位移和本工具第 1 版是同一套含义
-      const settings = migrateOffsetsV1(
-        parseMarkSettings({
-          ...old,
-          // 旧版的间隔是原图像素，换算不了，留空让它取默认值
-          spacingX: undefined,
-          spacingY: undefined,
-          position: old.position === "full-screen" ? "tile" : old.position,
-          font: legacyFont(old.fontFamily),
-          markId: null,
-        }),
-      );
+      const parsed = parseMarkSettings({
+        ...old,
+        // 旧版的间隔是原图像素，换算不了，留空让它取默认值
+        spacingX: undefined,
+        spacingY: undefined,
+        position: old.position === "full-screen" ? "tile" : old.position,
+        font: legacyFont(old.fontFamily),
+        markId: null,
+      });
+      const markAspect = old.imageWidth && old.imageHeight ? old.imageHeight / old.imageWidth : undefined;
+      const settings = migrateOffsetsV1(parsed, estimateV1Box(parsed, { markAspect }));
       const mark = markSchema.safeParse({ name: old.imageName, dataUrl: old.imageData, width: old.imageWidth, height: old.imageHeight });
       if (mark.success) settings.markId = addMark(mark.data);
       else if (settings.type === "image") settings.type = "text";

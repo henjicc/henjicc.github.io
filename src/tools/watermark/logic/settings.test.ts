@@ -12,6 +12,7 @@ import {
   parseAppSettings,
   parseMarkSettings,
   summarize,
+  type MarkSettings,
 } from "./settings";
 
 describe("位置", () => {
@@ -51,7 +52,7 @@ describe("第 1 版位移换算", () => {
       x: W / 2 + (offsetX / 100) * ((W - 900) / 2),
       y: H / 2 - (offsetY / 100) * ((H - 450) / 2),
     });
-    const v2Center = (s: typeof big) => planWatermark(s, { width: W, height: H }, "percent", () => 0, markImage)!.centers[0]!;
+    const v2Center = (s: MarkSettings) => planWatermark(s, { width: W, height: H }, "percent", () => 0, markImage)!.centers[0]!;
 
     it("外接框按 size% 和水印图片宽高比估出", () => {
       expect(box.width).toBeCloseTo(0.6);

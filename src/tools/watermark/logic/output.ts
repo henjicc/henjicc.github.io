@@ -24,10 +24,10 @@ export function outputFileName(sourceName: string, ext: string): string {
   return `watermarked-${stem}.${ext}`;
 }
 
-/** 压缩包里重名的文件依次加上 (2)、(3)，否则后一个会盖掉前一个。 */
-export function uniqueNames(names: readonly string[]): string[] {
+/** 压缩包里重名的文件依次加上 (2)、(3)，否则后一个会盖掉前一个。返回的函数按调用顺序记住用过的名字。 */
+export function uniqueNamer(): (name: string) => string {
   const used = new Set<string>();
-  return names.map((name) => {
+  return (name) => {
     let candidate = name;
     const dot = name.lastIndexOf(".");
     const stem = dot > 0 ? name.slice(0, dot) : name;
@@ -35,7 +35,7 @@ export function uniqueNames(names: readonly string[]): string[] {
     for (let n = 2; used.has(candidate.toLowerCase()); n++) candidate = `${stem} (${n})${ext}`;
     used.add(candidate.toLowerCase());
     return candidate;
-  });
+  };
 }
 
 export function zipFileName(now: Date): string {

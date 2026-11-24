@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { applyPosition, clampSize, FACTORY_APP, FACTORY_MARK, filenameAsText, fontStack, parseAppSettings, parseMarkSettings, summarize } from "./settings";
+import { applyPosition, clampSize, FACTORY_APP, FACTORY_MARK, filenameAsText, fontStack, migrateOffsetsV1, parseAppSettings, parseMarkSettings, summarize } from "./settings";
 
 describe("位置", () => {
-  it("九宫格把位移放到对应的边", () => {
-    expect(applyPosition(FACTORY_MARK, "top-left")).toMatchObject({ offsetX: -100, offsetY: 100 });
-    expect(applyPosition(FACTORY_MARK, "bottom-right")).toMatchObject({ offsetX: 100, offsetY: -100 });
+  it("选格子时偏移归零，水印落在锚点上", () => {
+    expect(applyPosition({ ...FACTORY_MARK, offsetX: 12, offsetY: -8 }, "top-left")).toMatchObject({ position: "top-left", offsetX: 0, offsetY: 0 });
     expect(applyPosition({ ...FACTORY_MARK, offsetX: 40 }, "center")).toMatchObject({ offsetX: 0, offsetY: 0 });
   });
   it("平铺时转成斜的，不动位移", () => {
@@ -12,10 +11,28 @@ describe("位置", () => {
   });
 });
 
+describe("第 1 版位移换算", () => {
+  it("贴边的老设置换成锚点上的 0", () => {
+    expect(migrateOffsetsV1({ ...FACTORY_MARK, position: "top-left", offsetX: -100, offsetY: 100 })).toMatchObject({ offsetX: 0, offsetY: 0 });
+    expect(migrateOffsetsV1({ ...FACTORY_MARK, position: "bottom-right", offsetX: 100, offsetY: -100 })).toMatchObject({ offsetX: 0, offsetY: 0 });
+  });
+  it("手动调过的值按新方向换算：向上为正变成向下为正", () => {
+    expect(migrateOffsetsV1({ ...FACTORY_MARK, position: "center", offsetX: 40, offsetY: 20 })).toMatchObject({ offsetX: 20, offsetY: -10 });
+    expect(migrateOffsetsV1({ ...FACTORY_MARK, position: "bottom-right", offsetX: 80, offsetY: -100 })).toMatchObject({ offsetX: -10, offsetY: 0 });
+  });
+  it("平铺只翻转垂直方向", () => {
+    expect(migrateOffsetsV1({ ...FACTORY_MARK, position: "tile", offsetX: 30, offsetY: 30 })).toMatchObject({ offsetX: 30, offsetY: -30 });
+  });
+});
+
 describe("读取存过的设置", () => {
   it("缺字段和坏值换成默认，超范围的夹回去", () => {
     const s = parseMarkSettings({ text: "你好", opacity: 5, color: "red", position: "nowhere", rotation: -999 });
     expect(s).toEqual({ ...FACTORY_MARK, text: "你好", opacity: 1, rotation: -180 });
+  });
+  it("超长的文字截断，不整段换成示例水印", () => {
+    const s = parseMarkSettings({ text: "长".repeat(2500) });
+    expect(s.text).toBe("长".repeat(2000));
   });
   it("空值也能读", () => {
     expect(parseMarkSettings(undefined)).toEqual(FACTORY_MARK);

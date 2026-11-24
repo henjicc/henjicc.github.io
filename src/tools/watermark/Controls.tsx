@@ -13,13 +13,15 @@ import { Swatches } from "~/ui/swatches";
 import { Switch } from "~/ui/switch";
 import { TextField } from "~/ui/text-field";
 import { Textarea } from "~/ui/textarea";
-import { chooseMarkImage, factoryReset, patchSettings, saveAsDefaults, setUnit, updateSettings } from "./actions";
+import { chooseMarkImage, patchSettings, saveAsDefaults, setUnit, updateSettings } from "./actions";
+import { LibraryFullError } from "./logic/presets";
 import {
   applyPosition,
   CELL_NAMES,
   CELLS,
   FONTS,
   LOCAL_FONT_PREFIX,
+  MAX_TEXT_LENGTH,
   OFFSET_RANGE,
   ROTATION_RANGE,
   SIZE_RANGE,
@@ -29,7 +31,7 @@ import {
   type FontId,
   type MarkSettings,
 } from "./logic/settings";
-import { Presets } from "./Presets";
+import { libraryError, Presets } from "./Presets";
 import { useApp, useDraft, useLibrary } from "./store";
 
 // 水印颜色是用户要用的内容色，不是界面颜色
@@ -188,7 +190,10 @@ function MarkImagePicker() {
         onChange={(e) => {
           const f = e.target.files?.[0];
           e.target.value = "";
-          if (f) chooseMarkImage(f).catch(() => toast.error("这张图片打不开，换一张 PNG 或 SVG 试试"));
+          if (f)
+            chooseMarkImage(f).catch((error: unknown) =>
+              error instanceof LibraryFullError ? libraryError(error, "水印图片没存上") : toast.error("这张图片打不开，换一张 PNG 或 SVG 试试"),
+            );
         }}
       />
     </div>
@@ -219,7 +224,7 @@ export function Controls({ settings }: { settings: MarkSettings }) {
             <label htmlFor="wm-text" className="text-ui text-ink">
               水印文字
             </label>
-            <Textarea id="wm-text" rows={3} className="min-h-24" value={s.text} spellCheck={false} onChange={(e) => patchSettings({ text: e.target.value })} />
+            <Textarea id="wm-text" rows={3} className="min-h-24" value={s.text} maxLength={MAX_TEXT_LENGTH} spellCheck={false} onChange={(e) => patchSettings({ text: e.target.value })} />
           </div>
         ) : (
           <MarkImagePicker />
@@ -238,8 +243,9 @@ export function Controls({ settings }: { settings: MarkSettings }) {
           ]}
         />
         {tile ? null : <PositionGrid value={s.position === "tile" ? null : s.position} onChange={(cell) => updateSettings(applyPosition(s, cell))} />}
-        <Slider label="水平位移" editable {...OFFSET_RANGE} value={s.offsetX} resetValue={defaults.offsetX} onValueChange={(offsetX) => patchSettings({ offsetX })} />
-        <Slider label="垂直位移" editable {...OFFSET_RANGE} value={s.offsetY} resetValue={defaults.offsetY} onValueChange={(offsetY) => patchSettings({ offsetY })} />
+        {/* 九宫格是在锚点基础上的偏移，平铺是整张网格的平移；标签写明方向，正数向右、向下 */}
+        <Slider label="向右偏移" editable unit="%" step={0.5} {...OFFSET_RANGE} value={s.offsetX} resetValue={0} onValueChange={(offsetX) => patchSettings({ offsetX })} />
+        <Slider label="向下偏移" editable unit="%" step={0.5} {...OFFSET_RANGE} value={s.offsetY} resetValue={0} onValueChange={(offsetY) => patchSettings({ offsetY })} />
         {tile ? (
           <>
             <Slider label="水平间隔" editable unit="%" {...SPACING_RANGE} value={s.spacingX} resetValue={defaults.spacingX} onValueChange={(spacingX) => patchSettings({ spacingX })} />
@@ -318,28 +324,16 @@ export function Controls({ settings }: { settings: MarkSettings }) {
           />
         </div>
         <Switch label="用文件名作水印文字" checked={useFilename} onCheckedChange={(v) => useApp.setState({ useFilename: v })} />
-        <div className="flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            onClick={() => {
-              saveAsDefaults();
-              toast.success("已设为默认");
-            }}
-          >
-            把当前设置设为默认
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              const before = useApp.getState();
-              factoryReset();
-              toast("已恢复出厂设置", { action: { label: "撤销", onClick: () => useApp.setState(before) } });
-            }}
-          >
-            恢复出厂设置
-          </Button>
-        </div>
+        <Button
+          size="sm"
+          className="justify-self-start"
+          onClick={() => {
+            saveAsDefaults();
+            toast.success("已把当前设置设为默认");
+          }}
+        >
+          设为默认
+        </Button>
       </ControlGroup>
     </>
   );

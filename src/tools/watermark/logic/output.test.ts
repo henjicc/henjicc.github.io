@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { chooseOutputFormat, fitPixels, isHeic, outputFileName, uniqueNames, zipFileName } from "./output";
+import { chooseOutputFormat, fitPixels, isHeic, outputFileName, uniqueNamer, zipFileName } from "./output";
 
 it("自动格式：可能透明的出 PNG，照片出 JPEG", () => {
   expect(chooseOutputFormat("auto", "image/png", "a.png", 0.9)).toEqual({ mime: "image/png", ext: "png" });
@@ -26,7 +26,7 @@ it("文件名", () => {
 });
 
 it("压缩包里重名的文件加编号", () => {
-  expect(uniqueNames(["a.jpg", "A.jpg", "a.jpg", "b"])).toEqual(["a.jpg", "A (2).jpg", "a (3).jpg", "b"]);
+  expect(["a.jpg", "A.jpg", "a.jpg", "b"].map(uniqueNamer())).toEqual(["a.jpg", "A (2).jpg", "a (3).jpg", "b"]);
 });
 
 it("超过画布上限时按比例缩小", () => {

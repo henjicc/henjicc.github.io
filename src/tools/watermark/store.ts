@@ -1,17 +1,29 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, type PersistStorage } from "zustand/middleware";
 import { toolStorage } from "~/shell/tool/persist";
 import type { Mark, Preset } from "./logic/presets";
 import type { Selection } from "./logic/selection";
-import { FACTORY_APP, FACTORY_MARK, parseAppSettings, parseMarkSettings, type AppSettings, type MarkSettings } from "./logic/settings";
+import { FACTORY_APP, FACTORY_MARK, migrateOffsetsV1, parseAppSettings, parseMarkSettings, type AppSettings, type MarkSettings } from "./logic/settings";
+
+/** 第 2 版改了位移的含义（见 migrateOffsetsV1），三个存储都要换算存过的水印设置。 */
+const VERSION = 2;
+
+function migrateMark(value: unknown, version: number): MarkSettings {
+  const s = parseMarkSettings(value);
+  return version < 2 ? migrateOffsetsV1(s) : s;
+}
 import meta from "./meta";
 
 /** 应用设置（默认水印、单位、导出格式）：几百字节，TOY 上存 B 站云存储。 */
 export const useApp = create<AppSettings>()(
   persist(() => ({ ...FACTORY_APP }), {
     name: "settings",
-    version: 1,
+    version: VERSION,
     storage: toolStorage<AppSettings>(meta.id, "settings"),
+    migrate: (persisted, version) => {
+      const p = (persisted ?? {}) as Partial<AppSettings>;
+      return { ...p, defaults: migrateMark(p.defaults, version) } as AppSettings;
+    },
     merge: (persisted, current) => ({ ...current, ...parseAppSettings(persisted) }),
   }),
 );
@@ -25,20 +37,52 @@ type Draft = { current: MarkSettings };
 export const useDraft = create<Draft>()(
   persist(() => ({ current: { ...FACTORY_MARK } }), {
     name: "draft",
-    version: 1,
+    version: VERSION,
     storage: toolStorage<Draft>(meta.id, "local"),
+    migrate: (persisted, version) => ({ current: migrateMark((persisted as Partial<Draft> | undefined)?.current, version) }),
     merge: (persisted, current) => ({ ...current, current: parseMarkSettings((persisted as Partial<Draft> | undefined)?.current) }),
   }),
 );
 
 type Library = { marks: Record<string, Mark>; presets: Preset[] };
 
+let lastLibraryWrite: Promise<boolean> = Promise.resolve(true);
+
+/**
+ * 平台层写本机存储失败（存满了）时不报错，只是没存上，重载后预设就没了。
+ * 这里写完再读回来比一遍，写没写上由 libraryWritten() 告诉调用方。库只在增删预设和水印图片时才写，读回的开销可以接受。
+ */
+function verifiedStorage(base: PersistStorage<Library>): PersistStorage<Library> {
+  return {
+    ...base,
+    setItem: (name, value) => {
+      const write = (async () => {
+        await base.setItem(name, value);
+        const back = await base.getItem(name);
+        return JSON.stringify(back) === JSON.stringify(value);
+      })();
+      lastLibraryWrite = write.catch(() => false);
+      return lastLibraryWrite.then(() => undefined);
+    },
+  };
+}
+
+/** 最近一次写预设库的结果：true 表示读回来和写进去的一样。 */
+export function libraryWritten(): Promise<boolean> {
+  return lastLibraryWrite;
+}
+
 /** 水印图片和预设：可能有几 MB（图片是 data URL），只存本机，不进云存储。和草稿分开存，拖滑块时不用反复写大数据。 */
 export const useLibrary = create<Library>()(
   persist(() => ({ marks: {} as Record<string, Mark>, presets: [] as Preset[] }), {
     name: "library",
-    version: 1,
-    storage: toolStorage<Library>(meta.id, "local"),
+    version: VERSION,
+    storage: verifiedStorage(toolStorage<Library>(meta.id, "local")),
+    migrate: (persisted, version) => {
+      const p = (persisted ?? {}) as Partial<Library>;
+      if (!Array.isArray(p.presets)) return p as Library;
+      return { ...p, presets: p.presets.map((x) => (x && typeof x === "object" ? { ...x, settings: migrateMark(x.settings, version) } : x)) } as Library;
+    },
     merge: (persisted, current) => {
       const p = persisted as Partial<Library> | undefined;
       const presets = Array.isArray(p?.presets)

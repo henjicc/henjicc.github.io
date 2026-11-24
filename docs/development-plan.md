@@ -79,7 +79,7 @@ export interface Platform {
   storage: {
     settings(namespace: string): KeyValueStore; // 小设置：TOY 走云存储（合并写入、页面隐藏时立即写，单值 ≤1KB），网站走 localStorage
     local(namespace: string): KeyValueStore;    // 名单、文本等较大的输入：两边都存 localStorage
-    flush(): Promise<void>;
+    flush(): Promise<boolean>; // 是否真的写出去了；退避期间返回 false
     legacy?(key: string): Promise<unknown>;     // 只有网站有：只读旧站点在同一域名下写的 localStorage 原始键，一次性导入旧数据
   };
   setImmersive(on: boolean, element?: HTMLElement | null): Promise<boolean>; // TOY 用 SDK 沉浸模式，网站用浏览器全屏
@@ -96,8 +96,8 @@ SDK 不提供用户 UID，`getUserProfile` 要用户确认才返回头像和昵�
 
 | 网站地址 | 页面 | TOY 里有没有 |
 |---|---|---|
-| `/` | 首页：首屏（名字、介绍、粉丝 / 获赞 / 播放、关注按钮、最新一期）、最近 6 期视频、小工具 | 工具箱合集的首页换成“工具列表 + 一句介绍 + 关注” |
-| `/works/` | 作品：目前只有视频（最近 30 期，可按最新或最多播放排序）。摄影上线时再加类别切换 | 不放 |
+| `/` | 首页：首屏（名字、介绍、粉丝 / 获赞 / 播放、关注按钮、最新一期）、最近 6 期视频、小工具。`showVideos` 关着时（现在）不显示最新一期和最近视频 | 工具箱合集的首页换成“工具列表 + 一句介绍 + 关注” |
+| `/works/` | 作品：目前只有视频（最近 30 期，可按最新或最多播放排序）。摄影上线时再加类别切换。**暂时隐藏**（2026-11-24 作者决定，`src/content/site.ts` 的 `showVideos`），不构建、访问 404 | 不放 |
 | `/works/photos/` | 摄影（第 6 阶段，还没做） | 视情况 |
 | `/tools/` | 工具箱 | 有 |
 | `/tools/<id>/` | 单个工具 | 有（合集里一页，或单独一个 TOY） |
@@ -269,16 +269,16 @@ TOY 不靠“发布前转换网站产物”实现，而是在构建时就打出�
 | 1 | 项目骨架：两种打包、令牌、ui 组件、shell、平台适配层、检查与冒烟测试；Cloudflare 构建设置改为 `npm run build:web` / `build/client`。**已上线** | 网站 |
 | 2 | 首页、作品（视频，构建时拉取）、关于、MiSans 字体；替换旧首页。**已上线**；视频暂不显示，部署钩子和 Secret 没建 | 网站 |
 | 3 | 工具外壳（桌面 + 手机）和随机抽取（最简单，先跑通整条链路）。**网站已上线**，TOY 暂不发布 | 网站 + 第一个 TOY |
-| 4 | 迁入水印工具；TOY 版接存相册和分享图片；`wmt.henjihenji.com` 301 到新地址。“转个格式”这一轮不迁（2026-11-24 用户决定）。**网站已上线**，TOY 暂不发布；301 已决定，执行中 | 网站 + TOY |
+| 4 | 迁入水印工具；TOY 版接存相册和分享图片；`wmt.henjihenji.com` 301 到新地址。“转个格式”这一轮不迁（2026-11-24 用户决定）。**网站已上线**，TOY 暂不发布；301 已生效 | 网站 + TOY |
 | 5 | 迁入批量文本处理（id `batch-text`）：第一版只上网站，不上 TOY；接口密钥默认只放内存，用户自己选“在这台设备上记住”时才保存（2026-11-24 用户决定）。**已上线** | 网站 |
 | 6 | 摄影作品：图片放 Cloudflare R2，上传时生成多尺寸（TOY 版不用 `.avif`）；作品页加“摄影” | 网站 |
-| 7 | 收尾：GitHub Pages 已关（2026-11-24 作者决定）；`wmt.henjihenji.com` 的 301 生效后删掉旧的独立 Pages 项目 `watermark-tool`、`batch-llm-text-processor`（已决定，执行中）；预览项目 `henji-next` 删不删由作者决定 | — |
+| 7 | 收尾：GitHub Pages 已关（2026-11-24 作者决定）；`wmt.henjihenji.com` 的 301 已生效，旧的独立 Pages 项目 `watermark-tool`、`batch-llm-text-processor` 已删除；预览项目 `henji-next` 删不删由作者决定 | — |
 
 迁入的旧工具（水印、批量文本处理）不再保留英文界面，只做中文（2026-11-24 用户决定）。
 
 ## 11. 完成标准
 
-- 首页首屏脚本 gzip 后不超过 145KB（React 19 + React Router 8 本身约 109KB；2026-11-24 调整，第 2 阶段完成时实测 143.1KB）；4G 网络下最大内容绘制不超过 2 秒。
+- 首页首屏脚本 gzip 后不超过 145KB（React 19 + React Router 8 本身约 109KB；2026-11-24 调整，第 2 阶段完成时实测 143.1KB；`build:web` 最后由 `scripts/home-budget.ts` 按 gzip -9 检查，超了构建失败；隐藏视频时 142.2KB，打开视频 144.6KB）；4G 网络下最大内容绘制不超过 2 秒。
 - 每个工具的 `logic/` 有 Vitest；Playwright 在两个目标上都能打开首页和每个工具、完成主操作，控制台没有报错。
 - 两套主题的文字对比度沿用设计系统里已校验的令牌；所有功能都能用键盘完成；尊重“减少动态效果”。
 - TOY 包通过 `toy` 脚本的检查：没有会被过滤的文件、没有根路径资源、引入了 SDK、大小在上限内。
@@ -291,7 +291,7 @@ TOY 不靠“发布前转换网站产物”实现，而是在构建时就打出�
 - [x] 找不到的地址：根目录的 `404.html` 接住大多数地址，`tools/404.html` 由工具路由渲染，接住 `/tools/<不存在的 id>/`，两边水合时匹配的路由一致（`react-router.config.ts`、`scripts/web-404.ts`）。
 - [x] 删除 2024 版旧站点文件，保留新站引用的 `imgs/BG01.jpg` 和 `icons/favicon.svg`。
 - [x] GitHub Pages 关掉（作者决定）。
-- [ ] `wmt.henjihenji.com` 用重定向规则 301 到 `/tools/watermark/`，确认可用后删旧的独立 Pages 项目 `watermark-tool`、`batch-llm-text-processor`。已决定，执行中。
+- [x] `wmt.henjihenji.com` 用重定向规则 301 到 `/tools/watermark/`（主机名靠一条已代理的占位 DNS 记录 `A wmt → 192.0.2.1` 接住），旧的独立 Pages 项目 `watermark-tool`、`batch-llm-text-processor` 已删除（2026-11-24）。
 - [ ] 预览项目 `henji-next`（只构建 `rebuild` 分支，https://henji-next.pages.dev ）已经多余：`henji` 给每个分支都生成预览。删不删由作者决定。
 - 旧随机抽取的 Service Worker：老访客的浏览器里还注册着它（缓存优先，范围 `/tools/random-picker/`）。网站构建在同一地址放了自毁脚本（`public/tools/random-picker/service-worker.js`），会清缓存、注销并重新加载页面。**至少保留几个月**，不常来的访客也换过来后再删。
 - 视频定时更新：部署钩子和仓库 Secret `CF_PAGES_DEPLOY_HOOK` 没建（视频暂不显示）。建了之后注意：GitHub 在仓库 60 天没有活动后会停用定时工作流，视频数据可能悄悄停更；构建时数据超过 7 天会在日志里提醒，看到就去 Actions 页面重新启用。

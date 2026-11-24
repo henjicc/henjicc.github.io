@@ -14,12 +14,12 @@ template_version: 27
 - 产品形态：纯静态，没有后端。所有处理都在访客浏览器里完成，不上传用户文件。
 - 现状：重构版 2026-11-24 上线，代码全在 `src/`（页面，以及工具 watermark、random-picker、batch-text）。2024 版旧站点的文件已从仓库删除。**做法以 [`docs/development-plan.md`](../docs/development-plan.md) 为准**（2026-11-24 用户确认）。要点：
   - 同一份代码发布到两个目标：网站（henjihenji.com，Cloudflare Pages，全部内容）和 B 站 TOY（只放工具：工具箱合集和单个工具）。两者的差异只放在平台适配层里。
-  - 一个仓库、一个域名：主页 `/`，作品 `/works/`（目前只有视频，没有子页面），工具 `/tools/<id>/`，关于 `/about/`。水印工具和批量 LLM 文本处理器的源码已迁进本仓库。
+  - 一个仓库、一个域名：主页 `/`，作品 `/works/`（暂时隐藏：`src/content/site.ts` 的 `showVideos` 为 `false` 时不注册、不构建，访问是 404），工具 `/tools/<id>/`，关于 `/about/`。水印工具和批量 LLM 文本处理器的源码已迁进本仓库。
   - 2026-11-24 用户决定：“转个格式”这一轮不迁（`gszh` 保持原样，新站暂时没有入口）；批量文本处理（id `batch-text`）第一版只上网站、不上 TOY，接口密钥默认只放内存，用户自己选记住时才存到设备上；迁入的旧工具不再保留英文界面；水印工具导出时保留原图的 EXIF，包括 GPS（和旧工具一致）。
   - 视频：2026-11-24 用户决定暂时不在网站上显示视频（「暂时不想在网站上显示我的视频」），由站点配置里的视频开关控制；频道数据照常显示。视频数据只在 Cloudflare Pages 构建时拉取，失败用仓库里提交的快照 `src/content/videos.json`。
   - 按“雾林设计系统”重新设计全部页面和工具，视觉完全统一（见下方“设计系统”）。
 - 明确不做：常用软件 / 装机清单（2026-11-24 用户决定整体去掉）。
-- 已决定、执行中（2026-11-24）：`wmt.henjihenji.com` 用 Cloudflare 重定向规则 301 到 `/tools/watermark/`；确认可用后删除旧的独立 Pages 项目 `watermark-tool` 和 `batch-llm-text-processor`。
+- 已完成（2026-11-24）：`wmt.henjihenji.com` 由 henjihenji.com 区域里的单一重定向规则 301 到 `https://www.henjihenji.com/tools/watermark/`（任何路径都跳到这一页）。规则要求该主机名有一条开代理的 DNS 记录，现在是占位用的 `A wmt → 192.0.2.1`（已代理），删掉它跳转就失效。旧的独立 Pages 项目 `watermark-tool` 和 `batch-llm-text-processor` 已删除。
 - 不在本仓库的作品：“转个格式”是已发布的 B 站 TOY（路径 `gszh`，链接访问），纯前端的文件格式转换工具，源码在作者本机的另一个项目里。
 
 ## 设计系统
@@ -54,7 +54,7 @@ template_version: 27
 - **推送 `main` 就是上线。** Cloudflare Pages 会自动构建并发布 `main`，所以推送前要用户确认（见下方协作例外）。
 - 只有构建产物 `build/client` 会被公开访问，仓库根目录的文件不再直接发布。要随网站发布的静态文件放 `public/`。
 - B 站图床（`i*.hdslb.com`）对带第三方 Referer 的请求返回 403，封面和头像的 `<img>` 必须 `referrerpolicy="no-referrer"`（`VideoCard` 已写死）。
-- 首页首屏脚本预算 gzip 145KB（开发方案第 11 节），只剩几 KB 余量：大块数据走路由 `loader`，重的代码按需加载。字体的 `@font-face` 规则让全站 CSS 约 450KB（gzip 约 150KB，Cloudflare 的 brotli 更小）。
+- 首页首屏脚本预算 gzip 145KB（开发方案第 11 节），`build:web` 最后由 `scripts/home-budget.ts` 检查，超了构建失败。2026-11-24 实测：隐藏视频时 142.2KB，打开视频 144.6KB，余量很小：大块数据走路由 `loader`，重的代码按需加载。字体的 `@font-face` 规则让全站 CSS 约 450KB（gzip 约 150KB，Cloudflare 的 brotli 更小）。
 - 浏览器本地存储按域名隔开。工具从子域名搬到主站后，访客在旧地址存的设置不会带过来。随机抽取在同一域名下，新版第一次打开时经 `platform.storage.legacy` 导入旧版的 `namePickerData` 名单（旧键不动）。
 - 旧随机抽取注册过缓存优先的 Service Worker。`public/tools/random-picker/service-worker.js` 是它的自毁版本，只进网站构建；2026-11-24 上线，至少保留几个月再删。
 - **TOY 和网站不是同一种运行环境**（依据官方文档，2026-11-24）：页面跑在 `/toy/<路径>/` 下，只能用相对路径；路由用哈希模式（`#/xxx`，官方推荐），分享深链只能带 query；只发布白名单后缀的文件（`.avif`、`.txt`、`.map` 等会被过滤）；当前账号包体上限 140MB。B 站内跳转、存相册、分享、设置记忆都走官方 SDK。所以页面和工具不能直接用 `window.open`、`localStorage`、`location`，统一走平台适配层（见开发方案第 3 节）。TOY 是否和 B 站主站同源还没在 App 里实测，实测前不往 TOY 的本地存储里放任何密钥。

@@ -30,7 +30,7 @@ TOY 上不放完整主页：访客本来就在你的 B 站频道里，视频列�
 | 动画 | Motion（`motion/react`） | 组件内动效；页面过渡用 View Transitions |
 | 工具内状态 | Zustand | 每个工具一个 store；持久化走平台适配层，不直接写 localStorage |
 | 数据校验 | Zod | 内容数据（视频、摄影、工具登记）在构建时校验 |
-| 字体 | MiSans 网页字体（按字切片、自托管） | 页脚注明“字体：MiSans”，这是许可要求 |
+| 字体 | MiSans 网页字体（按字切片、自托管） | 页脚注明“字体：MiSans”，这是许可要求。字体文件还没接入，目前用令牌里的系统字体回退 |
 | 测试 | Vitest + Playwright | 纯逻辑用 Vitest；两个发布目标各跑一遍 Playwright 冒烟 |
 | 代码检查 | TypeScript 严格模式 + ESLint | ESLint 禁止页面和工具直接用 `window.open`、`localStorage`、`location`，必须走平台适配层 |
 | TOY 发布 | B 站官方 Toy CLI（`toy`） | 创建、更新、查询、统计、绑定视频都用它；类型声明用官方的 `toy.d.ts` |
@@ -58,7 +58,7 @@ TOY 上不放完整主页：访客本来就在你的 B 站频道里，视频列�
 | 更新 | 推送 `main` 自动部署 | 每次都要构建、检查、预览、你确认，再提交审核 |
 | 包体 | 不紧张 | 当前账号上限 140MB（以发布页显示为准）；只发布白名单后缀，`.avif`、`.txt`、`.webmanifest`、`.map` 等会被过滤 |
 
-这些差异全部收进一个**平台适配层**（`src/platform/`）。页面和工具只调用它，不判断自己在哪个平台：
+这些差异全部收进一个**平台适配层**（`src/platform/`，接口在 `contract.ts`）。页面和工具只调用它（`import { platform } from "~/platform"`），不判断自己在哪个平台：
 
 ```ts
 export interface Platform {
@@ -66,15 +66,21 @@ export interface Platform {
   openBili(type: "video" | "space" | "opus", id: string): Promise<void>;
   openExternal(url: string): void;
   saveImage(canvas: HTMLCanvasElement, filename: string): Promise<"saved" | "downloaded" | "shown">;
-  copyText(text: string): Promise<"copied" | "selected">;   // TOY 里剪贴板接口被拒，退回 execCommand 或选中文本
+  // TOY 里剪贴板接口被拒：execCommand → 选中 source 让用户长按复制；都不行返回 "failed"
+  copyText(text: string, source?: HTMLElement | null): Promise<"copied" | "selected" | "failed">;
   shareImage?(canvas: HTMLCanvasElement): Promise<void>;
-  storage: {                        // 按工具分命名空间，值都是 JSON；TOY 上单个值不超过 1KB
-    get<T>(key: string): Promise<T | undefined>;
-    set<T>(key: string, value: T): Promise<void>;
+  storage: {
+    settings(namespace: string): KeyValueStore; // 小设置：TOY 走云存储（合并写入、页面隐藏时立即写，单值 ≤1KB），网站走 localStorage
+    local(namespace: string): KeyValueStore;    // 名单、文本等较大的输入：两边都存 localStorage
+    flush(): Promise<void>;
   };
-  setImmersive?(on: boolean): Promise<void>;
+  setImmersive(on: boolean, element?: HTMLElement | null): Promise<boolean>; // TOY 用 SDK 沉浸模式，网站用浏览器全屏
+  onImmersiveChange(listener: (on: boolean) => void): () => void;
 }
+// KeyValueStore = { get<T>(key), set<T>(key, value), remove(key) }，值都是 JSON
 ```
+
+工具不直接调用 storage，而是用 zustand 的 `persist` 加 `toolStorage(工具 id, "settings" | "local")`（`src/shell/tool/persist.ts`）。TOY 云存储另外写一份本机镜像，读取时取更新的那份。没拿到官方的 `toy.d.ts`，`src/platform/types/toy.d.ts` 是按第 0 阶段实测过的调用方式手写的最小声明，拿到官方声明后替换。
 
 SDK 不提供用户 UID，`getUserProfile` 要用户确认才返回头像和昵称；这几个工具都用不到用户身份，不调用它。
 
@@ -139,8 +145,7 @@ toy/
 
 ## 6. 页面过渡与动效
 
-- 网站：页面切换用 View Transitions（React Router 的 `viewTransition` 导航，或 React 自带的 `ViewTransition` 组件，开工时按当时的推荐做法选一个）。工具卡片的图标块和工具名用 `tool-<id>-icon`、`tool-<id>-name` 做共享元素。
-- TOY：哈希路由切换时同样包一层 `document.startViewTransition`，不支持时直接切换。
+- 两个目标都用 React Router 的 `viewTransition`（`<Link viewTransition>`、`navigate(to, { viewTransition: true })`），哈希路由同样生效，浏览器不支持时直接切换。工具卡片的图标块和工具名用 `tool-<id>-icon`、`tool-<id>-name` 做共享元素（`src/ui/vt.ts`），顶栏是 `site-head`。
 - 主题切换的圆形扩散、雾散入场、按压反馈等，全部按设计系统「动效」一节，原型里已经实现过一遍，可以直接参考。
 
 ## 7. 手机优先的工具布局
@@ -155,6 +160,8 @@ TOY 的访客几乎都在手机上，所以每个工具都先有手机布局，�
 
 正式开工时把这版补进设计系统，再按它实现其他工具。
 
+已实现为 `src/shell/tool/ToolShell.tsx`：按视口宽度（768px）选桌面或手机布局，工具只提供控制栏、舞台、一行摘要和主操作（快捷键默认 Ctrl/⌘ Enter，可改成空格）。工具界面只在浏览器里渲染：网站预渲染的工具页只有顶栏和占位，标题和描述在路由的 meta 里。
+
 ## 8. 一份代码，两种打包
 
 TOY 不靠“发布前转换网站产物”实现，而是在构建时就打出两种包。网站产物是多个 HTML、根路径和浏览器路由，事后改写容易漏，所以从源头分开：
@@ -164,17 +171,17 @@ TOY 不靠“发布前转换网站产物”实现，而是在构建时就打出�
 | `npm run dev` | 本地开发网站 |
 | `npm run build:web` | 构建网站，输出 `build/client/`（Cloudflare Pages 的输出目录） |
 | `npm run toy -- <目标>` | 打 TOY 包并检查，输出 `dist-toy/<目标>/`，**不上传** |
-| `npm run toy -- <目标> --preview` | 打包、检查后用官方 CLI 上传拿预览链接（需你确认） |
-| `npm run toy -- <目标> --publish` | 用记录里的 id 创建或更新，提交审核（需你确认） |
-| `npm run check` | 类型检查、ESLint、Vitest |
-| `npm run e2e` | Playwright：网站跑一遍；TOY 包挂在本地 `/toy/test/` 路径下再跑一遍 |
+| `npm run toy -- <目标> --preview` | 打包、检查后打印预览要执行的官方 CLI 命令，不上传（预览子命令还没记录，以 `toy --help` 为准） |
+| `npm run toy -- <目标> --publish` | 打包、检查后打印 `toy create …` 或（记录里有 id 时）`toy update <id> <目录>`，不上传 |
+| `npm run check` | 路由类型生成、类型检查、ESLint、Vitest |
+| `npm run e2e` | 先构建两边，再用 Playwright（本机 Chrome）跑：网站桌面和手机各一遍；TOY 工具箱包挂在本地 `/toy/test/` 路径下按 400 × 713 跑一遍 |
 
 `toy` 脚本做的事：
 
 1. 用 TOY 模式构建：相对路径、哈希路由、注入官方 SDK（`toy-sdk.js`）、选择打哪些页面（工具箱合集或单个工具）。
 2. 检查：根目录有 `index.html`；没有会被平台过滤的文件后缀；HTML、CSS、JS 里没有 `/` 开头的本地资源；引入了 SDK；有 `<title>`；总大小不超过上限。任何一项不过就停下。
-3. 生成封面（4:3，1200 × 900）和图标（1:1，500 × 500）：用雾林样式的模板自动截图，每个工具一套。
-4. 需要上传时才调用官方 CLI：`toy create <目录> --category TOOL --visibility <可见性> --poster … --icon …`，或 `toy update <id> <目录>`；结果写回 `toy/<目标>.json`。
+3. 生成封面（4:3，1200 × 900）和图标（1:1，500 × 500）：用雾林样式的模板自动截图，每个工具一套，放在 `dist-toy/<目标>-assets/`。
+4. 脚本本身从不上传，只打印要执行的官方 CLI 命令：`toy create <目录> --category TOOL --visibility <可见性> --poster … --icon …`，或 `toy update <id> <目录>`；你确认后自己运行，结果写回 `toy/<目标>.json`。
 
 发布：
 

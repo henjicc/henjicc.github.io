@@ -7,7 +7,7 @@ import { useHydrated, useIsMobile } from "./media";
 import { preloadPalette, togglePalette, usePalette } from "./palette";
 import { SiteHeader, useSceneHeaderMode } from "./SiteHeader";
 
-// 浮层和轻提示都按需加载：首页首屏的包里只有 React、路由和页面本身（目标 gzip ≤130KB，见开发方案第 11 节）。
+// 浮层和轻提示都按需加载：首页首屏的包里只有 React、路由和页面本身（目标 gzip ≤145KB，见开发方案第 11 节）。
 const CommandPalette = lazy(preloadPalette);
 const ImagePreview = lazy(() => import("./ImagePreview"));
 const Toaster = lazy(() => import("~/ui/sonner").then((m) => ({ default: m.Toaster })));

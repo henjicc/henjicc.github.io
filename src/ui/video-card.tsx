@@ -7,6 +7,11 @@ type VideoCardProps = {
   href: string;
   /** 封面图地址；没有时显示品牌色占位。 */
   cover?: string;
+  /** 封面的多尺寸地址，配合 sizes 让浏览器按显示宽度挑。 */
+  coverSrcSet?: string;
+  coverSizes?: string;
+  /** 首屏里的封面改成 eager，其余默认懒加载。 */
+  coverLoading?: "lazy" | "eager";
   /** 已格式化的时长，如“05:56”。 */
   duration?: string;
   /** 已格式化的播放量，如“68.9万”。 */
@@ -18,7 +23,20 @@ type VideoCardProps = {
   className?: string;
 };
 
-function VideoCard({ title, href, cover, duration, views, date, variant = "default", onClick, className }: VideoCardProps) {
+function VideoCard({
+  title,
+  href,
+  cover,
+  coverSrcSet,
+  coverSizes,
+  coverLoading = "lazy",
+  duration,
+  views,
+  date,
+  variant = "default",
+  onClick,
+  className,
+}: VideoCardProps) {
   const row = variant === "row";
   const meta = [views ? `${views} 播放` : null, date].filter(Boolean).join(" · ");
   return (
@@ -42,8 +60,12 @@ function VideoCard({ title, href, cover, duration, views, date, variant = "defau
         {cover ? (
           <img
             src={cover}
+            srcSet={coverSrcSet}
+            sizes={coverSrcSet ? coverSizes : undefined}
             alt=""
-            loading="lazy"
+            loading={coverLoading}
+            // B 站图床对第三方 Referer 返回 403，不发 Referer 才能显示
+            referrerPolicy="no-referrer"
             className="absolute inset-0 size-full object-cover transition-transform duration-(--dur-gentle) ease-out group-hover:scale-104"
           />
         ) : (

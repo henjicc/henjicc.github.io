@@ -71,6 +71,9 @@ describe("预设导入导出", () => {
     // 水平 (0 + 100) / 2 × (1 − 0.6)；垂直外接框按 3:2 的图占 0.6 × 0.5 × 1.5 = 0.45
     expect(p!.settings.offsetX).toBeCloseTo(20);
     expect(p!.settings.offsetY).toBeCloseTo(27.5);
+    // 当前是像素单位时 size 60 只是 60 像素宽，不知道图多大，按不计水印大小换算
+    const [px] = importPresets(JSON.stringify(v1), ids(), "px").presets;
+    expect(px!.settings).toMatchObject({ offsetX: 50, offsetY: 50 });
   });
 
   it("读不懂的内容报错", () => {

@@ -247,7 +247,7 @@ export function deletePreset(id: string): () => Promise<void> {
 }
 
 export async function importPresetText(text: string): Promise<number> {
-  const parsed = importPresets(text, newId);
+  const parsed = importPresets(text, newId, useApp.getState().unit);
   const marks = await Promise.all(parsed.marks.map(compactMark));
   await commitLibrary((l) => {
     const presets = [...l.presets, ...parsed.presets];

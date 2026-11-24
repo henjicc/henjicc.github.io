@@ -34,3 +34,6 @@ dist-ssr
 /.react-router/
 /playwright-report/
 /test-results/
+
+# Claude Code 的并行工作树
+/.claude/worktrees/

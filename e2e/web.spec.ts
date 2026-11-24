@@ -9,6 +9,63 @@ test("首页打开，工具箱列出随机抽取", async ({ page }) => {
   await expect(page.getByRole("link", { name: /随机抽取/ })).toBeVisible();
 });
 
+// B 站图床对带第三方 Referer 的请求返回 403。这里拦下封面请求（不依赖外网），核对请求里确实没有 Referer。
+const COVER = "https://*.hdslb.com/bfs/archive/**";
+const coverBody = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="9"><rect width="16" height="9" fill="#2a3a33"/></svg>';
+
+test.describe(() => {
+  let referers: (string | undefined)[] = [];
+  test.beforeEach(async ({ page }) => {
+    referers = [];
+    await page.route(COVER, (route) => {
+      referers.push(route.request().headers()["referer"]);
+      return route.fulfill({ contentType: "image/svg+xml", body: coverBody });
+    });
+  });
+
+  test("首页：首屏、频道数据、最新一期和最近的视频", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByRole("heading", { level: 1, name: "痕继痕迹" })).toBeVisible();
+    await expect(page.getByText("粉丝", { exact: true })).toBeVisible();
+    await expect(page.getByText("最新一期")).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "最近的视频" })).toBeVisible();
+    // 最新一期 + 最近 6 期
+    const covers = page.locator('a[href^="https://www.bilibili.com/video/"] img');
+    await expect(covers).toHaveCount(7);
+    for (const img of await covers.all()) {
+      await expect(img).toHaveAttribute("referrerpolicy", "no-referrer");
+      await expect(img).toHaveAttribute("src", /^https:\/\/i\d\.hdslb\.com\/bfs\/archive\/.+@672w_378h_1c\.webp$/);
+    }
+    // 最新一期在首屏，封面要真的加载出来，而且请求不带 Referer
+    await expect.poll(() => covers.first().evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0)).toBe(true);
+    expect(referers.length).toBeGreaterThan(0);
+    expect(referers.every((r) => r === undefined)).toBe(true);
+    await page.getByRole("link", { name: /全部视频/ }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "作品" })).toBeVisible();
+  });
+
+  test("作品：列出全部视频，能按播放量排序", async ({ page }) => {
+    await page.goto("/works/");
+    const titles = page.locator('a[href^="https://www.bilibili.com/video/"] h3');
+    await expect(titles.first()).toBeVisible();
+    const count = await titles.count();
+    expect(count).toBeGreaterThan(6);
+    await expect(page.locator('a[href^="https://www.bilibili.com/video/"] img[referrerpolicy="no-referrer"]')).toHaveCount(count);
+    const newest = await titles.first().textContent();
+    await page.getByRole("radio", { name: "最多播放" }).click();
+    await expect(titles.first()).not.toHaveText(newest ?? "");
+  });
+});
+
+test("关于：介绍和各平台主页", async ({ page }) => {
+  await page.goto("/about/");
+  await expect(page.getByRole("heading", { level: 1, name: "关于" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "关注我" })).toBeVisible();
+  for (const name of ["哔哩哔哩", "YouTube", "小红书", "抖音"]) {
+    await expect(page.getByRole("main").getByRole("link", { name })).toBeVisible();
+  }
+});
+
 test("切换主题后重新打开还是选过的那套", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "light" });
   await page.goto("/");

@@ -3,4 +3,3 @@
 # 只登记项目放资源、测试素材和文档配图的目录；规则见 rules/private-content.md。
 imgs/
 icons/
-tools/*/icons/

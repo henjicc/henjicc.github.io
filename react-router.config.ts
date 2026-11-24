@@ -21,8 +21,10 @@ export default {
     checkVideos();
     const toolPages = tools.filter((t) => t.status === "live").map((t) => `/tools/${t.id}/`);
     // /404 落在通配路由上，scripts/web-404.ts 再把它复制成 Cloudflare Pages 认的 404.html。
+    // /tools/404 落在工具路由上（显示“找不到”），复制成 tools/404.html：Pages 对找不到的地址返回最近一级目录的 404.html，
+    // /tools/<不存在的 id>/ 在浏览器里匹配的也是工具路由，两边对得上才不会水合失败、把页面渲染两遍。
     // 站内链接都带结尾斜杠（/works/），客户端跳转时取的数据文件是 /works/_.data；按同样的写法预渲染才会生成它
     const pages = getStaticPaths().map((p) => (p.endsWith("/") ? p : `${p}/`));
-    return [...pages, ...toolPages, "/404"];
+    return [...pages, ...toolPages, "/404", "/tools/404"];
   },
 } satisfies Config;

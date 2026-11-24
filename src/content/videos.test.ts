@@ -29,6 +29,15 @@ describe("显示格式", () => {
     expect(formatCount(123456789)).toBe("1.2亿");
   });
 
+  it("进位后够一个更大的单位时换单位", () => {
+    expect(formatCount(99_999_600)).toBe("1亿");
+    expect(formatCount(99_949_999)).toBe("9995万");
+    expect(formatCount(9_999)).toBe("9999");
+    expect(formatCount(10_000)).toBe("1万");
+    expect(formatCount(99_960)).toBe("10万");
+    expect(formatCount(999_960_000)).toBe("10亿");
+  });
+
   it("时长不到一小时写分秒，超过写时分秒", () => {
     expect(formatDuration(356)).toBe("05:56");
     expect(formatDuration(3723)).toBe("1:02:03");

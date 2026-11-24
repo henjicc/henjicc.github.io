@@ -16,11 +16,12 @@ export function coverImage(v: Pick<Video, "cover">) {
 
 /** 68.9万、1.2亿；不到一万原样显示。 */
 export function formatCount(n: number): string {
-  if (n >= 1e8) return `${trim(n / 1e8)}亿`;
-  if (n >= 1e4) return `${trim(n / 1e4)}万`;
+  // 先按一位小数取整再选单位：99,999,600 按万算会进位成 10000万，应该显示 1亿
+  const wan = Math.round(n / 1e3) / 10;
+  if (wan >= 1e4) return `${Math.round(n / 1e7) / 10}亿`;
+  if (n >= 1e4) return `${wan}万`;
   return String(n);
 }
-const trim = (x: number) => String(Math.round(x * 10) / 10);
 
 /** 05:56；超过一小时写成 1:02:03。 */
 export function formatDuration(seconds: number): string {

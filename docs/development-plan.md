@@ -1,6 +1,6 @@
 # henjihenji.com 重构开发方案
 
-> 状态：已定方案。第 0 阶段的 TOY 实测已完成（见第 9 节），手机版工具外壳还要补进设计系统。第 1、2、3 阶段的代码已在本地完成，还没切换上线（见第 10 节）。
+> 状态：已定方案。第 0 阶段的 TOY 实测已完成（见第 9 节），手机版工具外壳还要补进设计系统。第 1 到 5 阶段的代码已在本地完成（`src/` 里的工具：watermark、random-picker、batch-text），还没切换上线（见第 10 节，上线步骤见第 12 节）。
 > 视觉与交互以「雾林设计系统」和「雾林全站原型」为准，入口见 [`rules/project-context.md`](../rules/project-context.md)。本文只写怎么做。
 
 ## 1. 这是什么
@@ -30,6 +30,10 @@ TOY 上不放完整主页：访客本来就在你的 B 站频道里，视频列�
 | 动画 | Motion（`motion/react`） | 组件内动效；页面过渡用 View Transitions |
 | 工具内状态 | Zustand | 每个工具一个 store；持久化走平台适配层，不直接写 localStorage |
 | 数据校验 | Zod | 内容数据（视频、摄影、工具登记）在构建时校验 |
+| ZIP 打包 | fflate | 批量文本处理的结果打包下载 |
+| Markdown 预览 | react-markdown + remark-gfm | 批量文本处理的结果预览，打开预览时才加载 |
+| HEIC 解码 | heic-to | 水印工具读 iPhone 照片，用到时才加载；LGPL-3.0，关于页注明 |
+| EXIF | 自己写（`src/tools/watermark/logic/exif.ts`） | 只读水印要用的几项；第二个工具也要用时挪到共用目录 |
 | 字体 | MiSans 网页字体（npm 包 `misans`，按小米官方范围切片的 woff2，自托管） | 页脚注明“字体：MiSans”，这是许可要求。只引 400、500、600、700、900 五个字重（设计里的 800 落到 900 Heavy），在 `src/design/global.css`；不请求任何字体 CDN |
 | 测试 | Vitest + Playwright | 纯逻辑用 Vitest；两个发布目标各跑一遍 Playwright 冒烟 |
 | 代码检查 | TypeScript 严格模式 + ESLint | ESLint 禁止页面和工具直接用 `window.open`、`localStorage`、`location`，必须走平台适配层 |
@@ -76,6 +80,7 @@ export interface Platform {
     settings(namespace: string): KeyValueStore; // 小设置：TOY 走云存储（合并写入、页面隐藏时立即写，单值 ≤1KB），网站走 localStorage
     local(namespace: string): KeyValueStore;    // 名单、文本等较大的输入：两边都存 localStorage
     flush(): Promise<void>;
+    legacy?(key: string): Promise<unknown>;     // 只有网站有：只读旧站点在同一域名下写的 localStorage 原始键，一次性导入旧数据
   };
   setImmersive(on: boolean, element?: HTMLElement | null): Promise<boolean>; // TOY 用 SDK 沉浸模式，网站用浏览器全屏
   onImmersiveChange(listener: (on: boolean) => void): () => void;
@@ -83,7 +88,7 @@ export interface Platform {
 // KeyValueStore = { get<T>(key), set<T>(key, value), remove(key) }，值都是 JSON
 ```
 
-工具不直接调用 storage，而是用 zustand 的 `persist` 加 `toolStorage(工具 id, "settings" | "local")`（`src/shell/tool/persist.ts`）。TOY 云存储另外写一份本机镜像，读取时取更新的那份。没拿到官方的 `toy.d.ts`，`src/platform/types/toy.d.ts` 是按第 0 阶段实测过的调用方式手写的最小声明，拿到官方声明后替换。
+工具不直接调用 storage，而是用 zustand 的 `persist` 加 `toolStorage(工具 id, "settings" | "local")`（`src/shell/tool/persist.ts`）。TOY 云存储另外写一份本机镜像，读取时取更新的那份；写入失败的键放回待写，按退避重试，被限频（错误码 307044）时至少等 10 秒。`isSupport` 只缓存 SDK 真正给出的答案，超时只算这一次不支持。没拿到官方的 `toy.d.ts`，`src/platform/types/toy.d.ts` 是按第 0 阶段实测过的调用方式手写的最小声明，拿到官方声明后替换。
 
 SDK 不提供用户 UID，`getUserProfile` 要用户确认才返回头像和昵称；这几个工具都用不到用户身份，不调用它。
 
@@ -109,7 +114,7 @@ SDK 不提供用户 UID，`getUserProfile` 要用户确认才返回头像和昵�
 - 仓库里提交一份快照 `src/content/videos.json`（只有页面用到的字段：粉丝、获赞、播放合计和最近 30 期视频；接口返回的简介里有联系方式，不存）。拉取失败时构建照常用这份快照，日志里有 `[fetch-videos]` 开头的几行；数据超过 7 天构建会提醒。
 - 数据只在路由的 `loader` 里读（`src/content/video-data.ts`），预渲染时随 HTML 和 `_.data` 文件发出，不进 JS 包。
 - GitHub Actions `.github/workflows/update-videos.yml` 每天北京时间 06:00 调一次 Cloudflare Pages 部署钩子（仓库 Secret `CF_PAGES_DEPLOY_HOOK`，没配置时只提示）。钩子和 Secret 在切换上线时经你确认后再建。
-- 海外构建机可能被 B 站拦（412）：本机是国内网络，验证不了，第一次预览构建后看日志确认。长期拉不到就改成在国内的机器上定时运行 `npm run videos` 并提交。
+- Cloudflare 的构建机能拉到（预览项目 `henji-next` 上验证过），但会被 B 站拦（412），那次重试了约 7 次才成功；脚本按退避重试。长期拉不到就改成在国内的机器上定时运行 `npm run videos` 并提交。
 - 封面直接用 B 站图床：`<img>` 一律 `referrerpolicy="no-referrer"`（图床对第三方 Referer 返回 403），按显示宽度用 `@336w_189h_1c.webp` / `@672w_378h_1c.webp`，首屏以外懒加载。
 
 ## 5. 代码结构
@@ -141,8 +146,9 @@ src/
       Tool.tsx            界面：只用 ui/、shell/ 和 platform/
       logic/              纯函数：不碰 React 和 DOM，Vitest 测
       store.ts
-    random-picker/
-    text-batch/
+    random-picker/        随机抽取；第一次打开时导入旧版存的名单（只在网站上）
+    batch-text/           批量文本处理，只上网站
+public/                   只进网站构建的静态文件（TOY 包不带），目前只有旧 Service Worker 的自毁脚本
 scripts/
   fetch-videos.ts         拉取 B 站视频数据
   toy.ts                  TOY 打包、检查、生成封面和图标、调用官方 CLI
@@ -261,8 +267,8 @@ TOY 不靠“发布前转换网站产物”实现，而是在构建时就打出�
 | 1 | 项目骨架：两种打包、令牌、ui 组件、shell、平台适配层、检查与冒烟测试；Cloudflare 构建设置改为 `npm run build:web` / `build/client`。**代码已完成**，Cloudflare 设置切换上线时再改 | 网站预览分支 |
 | 2 | 首页、作品（视频，构建时拉取）、关于、MiSans 字体；替换现在的首页。**代码已完成**，没上线；部署钩子和 Secret 没建 | 网站 |
 | 3 | 工具外壳（桌面 + 手机）和随机抽取（最简单，先跑通整条链路）。**代码已完成**，没上线 | 网站 + 第一个 TOY |
-| 4 | 迁入水印工具；TOY 版接存相册和分享图片；`wmt.henjihenji.com` 301 到新地址。“转个格式”这一轮不迁（2026-11-24 用户决定） | 网站 + TOY |
-| 5 | 迁入批量文本处理：第一版只上网站，不上 TOY；接口密钥默认只放内存，用户自己选“在这台设备上记住”时才保存（2026-11-24 用户决定） | 网站 |
+| 4 | 迁入水印工具；TOY 版接存相册和分享图片；`wmt.henjihenji.com` 301 到新地址。“转个格式”这一轮不迁（2026-11-24 用户决定）。**代码已完成**，301 切换上线时再配 | 网站 + TOY |
+| 5 | 迁入批量文本处理（id `batch-text`）：第一版只上网站，不上 TOY；接口密钥默认只放内存，用户自己选“在这台设备上记住”时才保存（2026-11-24 用户决定）。**代码已完成** | 网站 |
 | 6 | 摄影作品：图片放 Cloudflare R2，上传时生成多尺寸（TOY 版不用 `.avif`）；作品页加“摄影” | 网站 |
 | 7 | 收尾：删掉旧的独立 Pages 项目；GitHub Pages 关掉或只留跳转页 | — |
 
@@ -274,3 +280,13 @@ TOY 不靠“发布前转换网站产物”实现，而是在构建时就打出�
 - 每个工具的 `logic/` 有 Vitest；Playwright 在两个目标上都能打开首页和每个工具、完成主操作，控制台没有报错。
 - 两套主题的文字对比度沿用设计系统里已校验的令牌；所有功能都能用键盘完成；尊重“减少动态效果”。
 - TOY 包通过 `toy` 脚本的检查：没有会被过滤的文件、没有根路径资源、引入了 SDK、大小在上限内。
+
+## 12. 切换上线清单
+
+- 预览项目：Cloudflare Pages 的 `henji-next`（henjicc 账户），只构建 `rebuild` 分支，环境变量 `NODE_VERSION=24`，地址 https://henji-next.pages.dev 。上线前在这里核对。
+- 生产项目 `henji`：构建命令改为 `npm run build:web`，输出目录改为 `build/client`；确认用的是构建镜像 v3、Node 版本取自 `.node-version`（`build:web` 直接用 `node scripts/fetch-videos.ts` 跑 TypeScript，要 Node 自带的类型剥离），第一次构建后在日志里核对 Node 版本。
+- 旧随机抽取的 Service Worker：老访客的浏览器里还注册着它（缓存优先，范围 `/tools/random-picker/`）。网站构建在同一地址放了自毁脚本（`public/tools/random-picker/service-worker.js`），会清缓存、注销并重新加载页面。**至少保留几个月**，不常来的访客也换过来后再删。
+- 找不到的地址：根目录的 `404.html` 接住大多数地址，`tools/404.html` 由工具路由渲染，接住 `/tools/<不存在的 id>/`，两边水合时匹配的路由一致（`react-router.config.ts`、`scripts/web-404.ts`）。
+- 视频定时更新：部署钩子和仓库 Secret `CF_PAGES_DEPLOY_HOOK` 经你确认后再建。GitHub 在仓库 60 天没有活动后会停用定时工作流，视频数据可能悄悄停更；构建时数据超过 7 天会在日志里提醒，看到就去 Actions 页面重新启用。
+- 删旧站点文件时保留 `imgs/` 和 `icons/`（新站直接引用）。
+- `wmt.henjihenji.com` 用重定向规则 301 到 `/tools/watermark/`，确认可用后再删旧的独立 Pages 项目。

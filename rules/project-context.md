@@ -12,11 +12,11 @@ template_version: 27
 
 - 产品：B 站 AI 科技区 UP 主「痕继痕迹」的个人主页 henjihenji.com。它是作品集和工具站的混合体：介绍本人，放视频和其他作品（以后会有摄影等），也是作者自己写的纯前端小工具的家。
 - 产品形态：纯静态，没有后端。所有处理都在访客浏览器里完成，不上传用户文件。
-- 已批准的计划（2026-11-24 用户确认）。**做法以 [`docs/development-plan.md`](../docs/development-plan.md) 为准**；第 1 阶段骨架、第 2 阶段的首页 / 作品 / 关于和第 3 阶段的随机抽取已写进 `src/`，还没切换上线（线上仍是根目录的旧站点）。要点：
+- 已批准的计划（2026-11-24 用户确认）。**做法以 [`docs/development-plan.md`](../docs/development-plan.md) 为准**；第 1 到 5 阶段的代码已写进 `src/`（页面，以及工具 watermark、random-picker、batch-text），还没切换上线（线上仍是根目录的旧站点；上线步骤见开发方案第 12 节）。要点：
   - 同一份代码发布到两个目标：网站（henjihenji.com，Cloudflare Pages，全部内容）和 B 站 TOY（只放工具：工具箱合集和单个工具）。两者的差异只放在平台适配层里。
   - 一个仓库、一个域名：主页 `/`，作品 `/works/`（目前只有视频，没有子页面），工具 `/tools/<id>/`，关于 `/about/`。水印工具和批量 LLM 文本处理器的源码迁进本仓库；`wmt.henjihenji.com` 用 Cloudflare 重定向规则 301 到新地址，确认可用后再删除对应的独立 Pages 项目。
-  - 2026-11-24 用户决定：“转个格式”这一轮不迁（`gszh` 保持原样，新站暂时没有入口）；批量文本处理第一版只上网站、不上 TOY，接口密钥默认只放内存，用户自己选记住时才存到设备上；迁入的旧工具不再保留英文界面。
-  - 视频数据只在 Cloudflare Pages 构建时拉取，失败用仓库里提交的快照 `src/content/videos.json`；每天由 GitHub Actions 调部署钩子触发构建（钩子和 Secret 切换上线时经用户确认再建）。海外构建机能不能拉到还没验证，看第一次预览构建的日志。
+  - 2026-11-24 用户决定：“转个格式”这一轮不迁（`gszh` 保持原样，新站暂时没有入口）；批量文本处理（id `batch-text`）第一版只上网站、不上 TOY，接口密钥默认只放内存，用户自己选记住时才存到设备上；迁入的旧工具不再保留英文界面。
+  - 视频数据只在 Cloudflare Pages 构建时拉取，失败用仓库里提交的快照 `src/content/videos.json`；每天由 GitHub Actions 调部署钩子触发构建（钩子和 Secret 切换上线时经用户确认再建）。Cloudflare 构建机能拉到，但会被 412 拦，预览构建时重试了约 7 次才成功。
   - 按“雾林设计系统”重新设计全部页面和工具，视觉完全统一（见下方“设计系统”）。
   - 分阶段上线，第 0 阶段先在 TOY 上验证几件文档里确认不了的事。
 - 明确不做：常用软件 / 装机清单（2026-11-24 用户决定整体去掉，重构后不再保留现在主页的“常用软件”弹窗）。
@@ -48,6 +48,7 @@ template_version: 27
 
 - Cloudflare Pages 项目 `henji`（henjicc 这个 Cloudflare 账户）连接本仓库：生产分支 `main`，自动部署；构建命令为空，输出就是仓库根目录。域名为 `henjihenji.com`、`www.henjihenji.com`、`henji.pages.dev`，DNS 也托管在这个账户。另一个 Cloudflare 账户里没有本站。重构上线时把构建命令改为 `npm run build:web`、输出目录改为 `build/client`。
 - GitHub Pages（`henjicc.github.io`）也直接发布仓库根目录，和 Cloudflare 是同一份内容。
+- 预览项目：Cloudflare Pages 的 `henji-next`（henjicc 账户），只构建 `rebuild` 分支，`NODE_VERSION=24`，https://henji-next.pages.dev 。
 - B 站 TOY：已有“转个格式”（`gszh`）；第 0 阶段的探针“痕迹工具箱测试”（`henji-toy-probe`，密码访问，id 58660860469248）已提交审核。发布用 B 站官方 Toy CLI（`toy create` / `toy update`，尚未安装），`npm run toy` 只打包、检查、生成封面图标，`--preview` / `--publish` 只打印要执行的 CLI 命令，由作者确认后自己运行；每个 TOY 的 id 和路径记在 `toy/<目标>.json`，路径发布后不能改。第 0 阶段的探针包在 `.local/toy-probe/`（不进仓库）。
 - 品牌：Logo 是 `index.html` 里内联的 SVG（“C”形线框），`icons/favicon.svg` 是网站图标。品牌色是 Logo 渐变里的天蓝，rgb(0,160,234) → rgb(6,182,255)，设计系统里叫 `sky`。
 - 社交链接（B 站、YouTube、小红书、抖音）写在 `index.html` 的“关注我”弹窗里；这些是作者公开的主页地址，属于网站内容。
@@ -60,7 +61,8 @@ template_version: 27
 - 工具链接要写成目录路径（`./tools/random-picker/`）。2025-12 写成 `.../index.html` 时线上打不开，改成目录路径后正常。
 - B 站图床（`i*.hdslb.com`）对带第三方 Referer 的请求返回 403，封面和头像的 `<img>` 必须 `referrerpolicy="no-referrer"`（`VideoCard` 已写死）。
 - 首页首屏脚本预算 gzip 145KB（开发方案第 11 节），只剩几 KB 余量：大块数据走路由 `loader`，重的代码按需加载。字体的 `@font-face` 规则让全站 CSS 约 450KB（gzip 约 150KB，Cloudflare 的 brotli 更小）。
-- 浏览器本地存储按域名隔开。工具从子域名搬到主站后，访客在旧地址存的设置不会带过来。
+- 浏览器本地存储按域名隔开。工具从子域名搬到主站后，访客在旧地址存的设置不会带过来。随机抽取在同一域名下，新版第一次打开时经 `platform.storage.legacy` 导入旧版的 `namePickerData` 名单（旧键不动）。
+- 旧随机抽取注册过缓存优先的 Service Worker。`public/tools/random-picker/service-worker.js` 是它的自毁版本，只进网站构建，上线后至少保留几个月。
 - **TOY 和网站不是同一种运行环境**（依据官方文档，2026-11-24）：页面跑在 `/toy/<路径>/` 下，只能用相对路径；路由用哈希模式（`#/xxx`，官方推荐），分享深链只能带 query；只发布白名单后缀的文件（`.avif`、`.txt`、`.map` 等会被过滤）；当前账号包体上限 140MB。B 站内跳转、存相册、分享、设置记忆都走官方 SDK。所以页面和工具不能直接用 `window.open`、`localStorage`、`location`，统一走平台适配层（见开发方案第 3 节）。TOY 是否和 B 站主站同源还没在 App 里实测，实测前不往 TOY 的本地存储里放任何密钥。
 - TOY 在 B 站 App 里实测（2026-11-24）：页面跑在 `www.bilibilitoy.com` 的 iframe 里；SDK 能力全部可用；剪贴板接口被拒；存相册没有系统提示；**手机侧滑返回会直接退出 TOY**，所以 TOY 里页面层级要浅、工具状态要随时保存。详见开发方案第 9 节。
 - 本机的 `bili-toy-publisher` 技能有几处已经过时（说不能用 `#` 路由、包体 20MB、命令行脚本连 B 站内部地址）。TOY 的事以官方文档和官方 Toy CLI 为准。
@@ -76,7 +78,7 @@ template_version: 27
   - `npm run videos`：手动拉取最新视频数据覆盖 `src/content/videos.json`，看过 diff 再提交。
   - `npm run toy -- <toolbox | 工具 id>`：打 TOY 包到 `dist-toy/<目标>/` 并检查，封面和图标在 `dist-toy/<目标>-assets/`。从不上传。
   - `npm run check`：路由类型生成 + `tsc` + ESLint + Vitest。
-  - `npm run e2e`：先构建网站和 TOY 工具箱，再用 Playwright 跑冒烟（网站桌面和手机、TOY 包挂在本地 `/toy/test/`）。浏览器用本机装的 Chrome。
+  - `npm run e2e`：先构建网站和 TOY 工具箱，再用 Playwright 跑冒烟（网站桌面和手机、TOY 包挂在本地 `/toy/test/`）。浏览器用本机装的 Chrome。本地不是 CI 时会复用已经在 4173 / 4317 端口上的服务：并行的工作树各自跑时先确认端口没被别的工作树占着，否则测到的是别人的构建。
 - 最低验证：改了代码跑 `npm run check`；改了页面、外壳或工具再跑 `npm run e2e`，并在浏览器里看一遍受影响的页面（两套主题、桌面和手机宽度）。旧站点（根目录的 `index.html`、`tools/random-picker/`）仍按原样用静态服务器预览，切换上线前不改它们。上线后（用户确认推送之后）打开 https://www.henjihenji.com/ 核对内容。
 
 ## 协作例外

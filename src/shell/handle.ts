@@ -13,10 +13,15 @@ export type ShellHandle = {
   footer?: boolean;
 };
 
+/** 工具路由的地址参数：TOY 写成 tools/:id，网站写成 tools/*（原因见 src/web/routes.ts），通配部分去掉结尾的斜杠。 */
+export function toolIdFromParams(params: Record<string, string | undefined>): string | undefined {
+  return params.id ?? params["*"]?.replace(/\/+$/, "");
+}
+
 export function useShellRoute(): { handle: ShellHandle; toolId: string | null } {
   const matches = useMatches();
   const last = matches[matches.length - 1];
   const handle = (last?.handle ?? {}) as ShellHandle;
-  const toolId = handle.tool ? (last?.params.id ?? singleToolId ?? null) : null;
+  const toolId = handle.tool ? ((last && toolIdFromParams(last.params)) ?? singleToolId ?? null) : null;
   return { handle, toolId };
 }

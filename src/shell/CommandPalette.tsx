@@ -1,6 +1,7 @@
 import { Moon, PlayCircle, Sun } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
+import { showVideos } from "~/content/site";
 import { videoFile } from "~/content/video-data";
 import { formatDuration } from "~/content/videos";
 import { platform } from "~/platform";
@@ -25,8 +26,8 @@ import { resolveTheme, toggleTheme, useThemeStore } from "./theme";
 // 按需加载（见 AppShell），所以 cmdk 和视频快照都不进首页首屏的包。
 // 页面排在视频前面：1440×900 下打开时“关于”不用滚动就能看到。
 
-/** 最近几期视频。TOY 里只放工具，没有这一组。 */
-const latestVideos = isToy ? [] : videoFile.videos.slice(0, 6);
+/** 最近几期视频。TOY 里只放工具，网站不显示视频时也没有这一组。 */
+const latestVideos = isToy || !showVideos ? [] : videoFile.videos.slice(0, 6);
 export default function CommandPalette() {
   const open = usePalette((s) => s.open);
   const choice = useThemeStore((s) => s.choice);
@@ -52,7 +53,7 @@ export default function CommandPalette() {
       label="搜索"
     >
       {/* 不写 autoFocus：交给 Radix 聚焦第一个输入框，它才记得住打开前的焦点，关上时还回去 */}
-      <CommandInput value={query} onValueChange={setQuery} placeholder={isToy ? "搜索工具" : "搜索工具、视频和页面"} />
+      <CommandInput value={query} onValueChange={setQuery} placeholder={isToy ? "搜索工具" : latestVideos.length ? "搜索工具、视频和页面" : "搜索工具和页面"} />
       <CommandList>
         <CommandEmpty>没有找到“{query}”</CommandEmpty>
         {tools.length ? (

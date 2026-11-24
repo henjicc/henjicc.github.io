@@ -1,4 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
+import { showVideos } from "../src/content/site";
 import { expect, test } from "./fixtures";
 
 // 外壳和共享组件的交互：快捷键、焦点、Esc 分层、全屏、手机菜单、命令面板、触控尺寸和页面布局。
@@ -57,6 +58,23 @@ test.describe("随机抽取的空格键", () => {
     await expect(page.getByRole("button", { name: "开始抽取" })).toBeVisible();
     await page.getByRole("button", { name: "退出全屏" }).click();
     await expect.poll(() => page.evaluate(() => document.fullscreenElement)).toBeNull();
+  });
+
+  test("按住空格只触发一次，自动重复的按键也被拦下，不会滚动页面", async ({ page }) => {
+    await page.evaluate(() => {
+      const w = window as unknown as { repeats: boolean[] };
+      w.repeats = [];
+      window.addEventListener("keydown", (e) => {
+        if (e.code === "Space" && e.repeat) w.repeats.push(e.defaultPrevented);
+      });
+    });
+    await page.keyboard.down("Space");
+    await expect(page.getByRole("button", { name: "停下" })).toBeVisible();
+    // 已经按下时再 down 一次，Playwright 发出的是 repeat 为 true 的 keydown
+    for (let i = 0; i < 3; i++) await page.keyboard.down("Space");
+    await page.keyboard.up("Space");
+    expect(await page.evaluate(() => (window as unknown as { repeats: boolean[] }).repeats)).toEqual([true, true, true]);
+    await expect(page.getByRole("button", { name: "停下" })).toBeVisible();
   });
 
   test("主按钮在“开始抽取”和“停下”之间不改变宽度", async ({ page }) => {
@@ -136,7 +154,7 @@ test.describe("手机顶栏和菜单", () => {
   });
 
   test("菜单开在顶栏下面，标出当前页，里面能切换主题，关掉后焦点回到菜单按钮", async ({ page }) => {
-    await page.goto("/works/");
+    await page.goto("/about/");
     const header = page.locator("header").first();
     // 手机顶栏只有 Logo、搜索和菜单
     await expect(header.getByRole("button", { name: "切换主题" })).toBeHidden();
@@ -147,8 +165,9 @@ test.describe("手机顶栏和菜单", () => {
     expect((await box(menu)).y).toBeGreaterThanOrEqual((await box(header)).y + (await box(header)).height - 1);
     // 菜单开着时 Radix 把页面其余部分对读屏隐藏，按属性找
     await expect(header.locator("button[aria-label='关闭菜单']")).toBeVisible();
-    await expect(menu.getByRole("link", { name: "作品" })).toHaveAttribute("aria-current", "page");
-    await expect(menu.getByRole("link", { name: "关于" })).not.toHaveAttribute("aria-current", /.+/);
+    await expect(menu.getByRole("link", { name: "关于" })).toHaveAttribute("aria-current", "page");
+    await expect(menu.getByRole("link", { name: "小工具" })).not.toHaveAttribute("aria-current", /.+/);
+    await expect(menu.getByRole("link", { name: "作品" })).toHaveCount(showVideos ? 1 : 0);
     await page.keyboard.press("Escape");
     await expect(menu).toBeHidden();
     await expect(menuButton).toBeFocused();
@@ -161,11 +180,12 @@ test.describe("手机顶栏和菜单", () => {
   });
 
   test("可点的东西不小于 44×44", async ({ page }) => {
-    await page.goto("/works/");
+    // 作品页有排序的分段控件；不显示视频时没有作品页，换成关于页
+    await page.goto(showVideos ? "/works/" : "/about/");
     const targets = [
       page.locator("header").first().getByRole("button", { name: "搜索" }),
       page.locator("header").first().getByRole("button", { name: "菜单" }),
-      page.getByRole("radio", { name: "最多播放" }),
+      ...(showVideos ? [page.getByRole("radio", { name: "最多播放" })] : []),
       page.getByRole("contentinfo").getByRole("link").first(),
     ];
     for (const t of targets) {
@@ -176,14 +196,16 @@ test.describe("手机顶栏和菜单", () => {
   });
 });
 
-test("命令面板：视频分组；1440×900 下不用滚动就能看到“关于”；关掉后焦点回到搜索按钮", async ({ page }) => {
+test("命令面板：视频分组（不显示视频时没有）；1440×900 下不用滚动就能看到“关于”；关掉后焦点回到搜索按钮", async ({ page }) => {
   test.skip(mobile(page), "按桌面尺寸核对");
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   const search = page.locator("header").getByRole("button", { name: /搜索/ }).first();
   await search.click();
   const dialog = page.getByRole("dialog", { name: "搜索" });
-  await expect(dialog.getByText("视频", { exact: true })).toBeVisible();
+  await expect(dialog.getByRole("option", { name: "关于" })).toBeVisible();
+  await expect(dialog.getByText("视频", { exact: true })).toHaveCount(showVideos ? 1 : 0);
+  await expect(dialog.getByRole("option", { name: "作品" })).toHaveCount(showVideos ? 1 : 0);
   const about = dialog.getByRole("option", { name: "关于" });
   const list = dialog.getByRole("listbox");
   const a = await box(about);
@@ -236,4 +258,31 @@ test("theme-color 跟着当前主题", async ({ page }) => {
   const dawn = await ground();
   expect(dawn).not.toBe(night);
   await expect(meta).toHaveAttribute("content", dawn);
+});
+
+test("手机上软键盘弹出时，贴底的对话框跟着可见区域上移，正在填的输入框不被挡住", async ({ page }) => {
+  test.skip(!mobile(page), "贴底的对话框只在手机上");
+  await page.goto("/tools/batch-text/");
+  // 安卓 Chrome 只有声明了 resizes-content，弹出键盘时才缩小布局视口；这里用缩小视口来模拟键盘
+  await expect(page.locator('meta[name="viewport"]')).toHaveAttribute("content", /interactive-widget=resizes-content/);
+  await expect(page.getByRole("button", { name: "开始处理" })).toBeEnabled();
+  await openSheet(page);
+  await page.getByRole("button", { name: "管理接口" }).click();
+  const dialog = page.getByRole("dialog", { name: "接口配置" });
+  await dialog.getByRole("button", { name: "编辑 默认配置" }).click();
+  const field = dialog.getByLabel("模型", { exact: true });
+  await field.focus();
+  const size = page.viewportSize()!;
+  const keyboardTop = Math.round(size.height * 0.55);
+  await page.setViewportSize({ width: size.width, height: keyboardTop });
+  // 浏览器在键盘弹出后会把正在填的输入框滚进可见区域；这里重新聚焦一次代替
+  await field.blur();
+  await field.focus();
+  await expect.poll(async () => {
+    const d = await box(dialog);
+    return d.y + d.height;
+  }).toBeLessThanOrEqual(keyboardTop + 1);
+  const f = await box(field);
+  expect(f.y).toBeGreaterThanOrEqual(0);
+  expect(f.y + f.height).toBeLessThanOrEqual(keyboardTop);
 });

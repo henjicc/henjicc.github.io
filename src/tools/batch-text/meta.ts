@@ -10,4 +10,6 @@ export default {
   keywords: ["plwb", "piliang", "llm", "ai", "改写", "翻译", "总结", "大模型"],
   // 第一期只上网站：TOY 的来源被所有 TOY 共用，接口密钥没有安全的地方存
   toy: false,
+  // 文件内容会发到访客自己配置的大模型接口
+  local: false,
 } satisfies ToolMeta;

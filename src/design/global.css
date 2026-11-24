@@ -153,6 +153,39 @@
     background: var(--ground);
     -webkit-text-size-adjust: 100%;
   }
+  /* 细的圆角滚动条：Windows 上控制栏、文本框、命令面板和抽屉里都会露出来。scrollbar-width 不继承，所以每个元素都写；
+     Chrome 认标准属性后会忽略 ::-webkit-scrollbar，下面那组只给 Safari 用 */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--line-strong);
+    border-radius: var(--radius-full);
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  /* 页脚压在短页面的底部：顶栏、main、页脚竖排，main 撑开。网站挂在 body 上，TOY 挂在 #root 上 */
+  body,
+  #root {
+    display: flex;
+    flex-direction: column;
+  }
+  body {
+    min-height: 100svh;
+  }
+  #root,
+  main {
+    flex: 1 0 auto;
+  }
   body {
     margin: 0;
     font-family: var(--font-sans);
@@ -167,6 +200,12 @@
   h2,
   h3 {
     text-wrap: balance;
+  }
+  /* 中文段落最后一行不留一个字孤零零地占一行 */
+  p,
+  li,
+  dd {
+    text-wrap: pretty;
   }
   /* 设计系统规定 Lucide 描边 1.75 */
   .lucide {
@@ -252,10 +291,11 @@
   position: relative;
   isolation: isolate;
   color: var(--on-scene);
+  /* 照片比遮罩短 1px：场景高度带小数时，照片底边的抗锯齿像素会从遮罩下面透出一条细缝 */
   &::before {
     content: "";
     position: absolute;
-    inset: 0;
+    inset: 0 0 1px;
     z-index: -2;
     background: var(--scene-img, none) center 30% / cover no-repeat;
   }
@@ -300,6 +340,31 @@
   }
 }
 
+/* 菜单按钮展开时三条线变成关闭的 X（Lucide menu 图标的三条 path，y 分别是 5、12、19）。用样式变形，不为它多加载一个图标 */
+@utility menu-x {
+  & path {
+    transform-box: view-box;
+    transform-origin: 12px 12px;
+    transition:
+      transform var(--dur-base) var(--ease-out),
+      opacity var(--dur-quick) var(--ease-out);
+  }
+  &[aria-expanded="true"] path:nth-child(1) {
+    transform: rotate(45deg) translateY(7px);
+  }
+  &[aria-expanded="true"] path:nth-child(2) {
+    opacity: 0;
+  }
+  &[aria-expanded="true"] path:nth-child(3) {
+    transform: rotate(-45deg) translateY(-7px);
+  }
+}
+
+/* 取景框里再放一个带取景框的区域（如舞台里的拖放区）时，只留外面那一圈 */
+.vf .vf::before {
+  content: none;
+}
+
 /* 雾散入场 / 雾隐退场 */
 @keyframes mist-in {
   from {
@@ -335,6 +400,13 @@
     opacity: 0;
     transform: scale(0.97);
     filter: blur(4px);
+  }
+}
+/* 手机上弹窗从底部升起 */
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
   }
 }
 @keyframes fog-drift {

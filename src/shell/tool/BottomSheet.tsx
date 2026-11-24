@@ -10,11 +10,15 @@ type BottomSheetProps = {
   onOpenChange: (open: boolean) => void;
   summary: ReactNode;
   children: ReactNode;
+  /** 抽屉实际占的高度（展开时的整高，收起时的露出部分），外壳据此把舞台内容挪到抽屉上方。 */
+  onCoverChange?: (height: number) => void;
 };
 
 // 手机工具的设置抽屉：收起只露出把手和一行摘要；点一下或往上拖展开（约 62% 屏高），松手按位置和速度吸附到两档之一。
-export function BottomSheet({ open, onOpenChange, summary, children }: BottomSheetProps) {
+export function BottomSheet({ open, onOpenChange, summary, children, onCoverChange }: BottomSheetProps) {
   const sheet = useRef<HTMLElement>(null);
+  const handle = useRef<HTMLButtonElement>(null);
+  const body = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState(0);
   const y = useMotionValue(0);
   const drag = useDragControls();
@@ -47,9 +51,22 @@ export function BottomSheet({ open, onOpenChange, summary, children }: BottomShe
   }, [open, closedY, height, reduceMotion, y]);
 
   useEffect(() => {
+    onCoverChange?.(open ? height : Math.min(height, SHEET_PEEK));
+  }, [open, height, onCoverChange]);
+
+  // 收起时内容区变成 inert，焦点留在里面会掉到 body 上；先把焦点交给把手，再设 inert。
+  useLayoutEffect(() => {
+    const el = body.current;
+    if (!el) return;
+    if (!open && el.contains(document.activeElement)) handle.current?.focus();
+    el.inert = !open;
+  }, [open]);
+
+  useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onOpenChange(false);
+      // 抽屉里的下拉、弹窗（Radix）在捕获阶段处理 Esc 并 preventDefault：这一下只关它们，不连抽屉一起收起
+      if (e.key === "Escape" && !e.defaultPrevented) onOpenChange(false);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -78,6 +95,7 @@ export function BottomSheet({ open, onOpenChange, summary, children }: BottomShe
       className="absolute inset-x-0 bottom-0 z-2 grid h-[62%] grid-rows-[auto_minmax(0,1fr)] rounded-t-xl border-t border-line bg-surface shadow-float"
     >
       <button
+        ref={handle}
         type="button"
         aria-expanded={open}
         aria-controls={bodyId}
@@ -98,7 +116,7 @@ export function BottomSheet({ open, onOpenChange, summary, children }: BottomShe
         <span className="truncate text-ui">{summary}</span>
         <span className="text-caption font-medium text-sky-text">{open ? "收起" : "设置"}</span>
       </button>
-      <div id={bodyId} inert={!open} className="grid content-start gap-6 overflow-auto overscroll-contain px-5 pt-1 pb-5">
+      <div ref={body} id={bodyId} className="grid content-start gap-6 overflow-auto overscroll-contain px-5 pt-1 pb-5">
         {children}
       </div>
     </motion.section>

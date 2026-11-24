@@ -25,6 +25,7 @@ function applyChoice(choice: ThemeChoice) {
   if (choice === "system") delete root.dataset.theme;
   else root.dataset.theme = choice;
   useThemeStore.setState({ choice });
+  void import("./theme-color").then((m) => m.syncThemeColor());
   void platform.storage.local(THEME_STORE.namespace).set(THEME_STORE.key, choice === "system" ? undefined : choice);
 }
 

@@ -35,6 +35,18 @@ export function AboutPage({ profile }: { profile: VideosFile["profile"] }) {
             ))}
           </div>
         </section>
+        {/* LGPL 要求注明用到的库和它的许可证、给出源码地址；MiSans 的许可要求注明字体 */}
+        <section className="grid gap-2 text-caption text-ink-muted">
+          <h2 className="m-0 text-ui font-semibold text-ink">开源许可</h2>
+          <p className="m-0">
+            水印工具用{" "}
+            <a href="https://github.com/hoppergee/heic-to" target="_blank" rel="noreferrer" className="focus-ring rounded-xs text-sky-text underline-offset-2 hover:underline">
+              heic-to
+            </a>
+            （LGPL-3.0）读取 HEIC 照片。
+          </p>
+          <p className="m-0">全站字体是小米的 MiSans。</p>
+        </section>
       </div>
     </div>
   );

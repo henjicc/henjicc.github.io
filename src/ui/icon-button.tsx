@@ -14,7 +14,7 @@ function IconButton({ icon: Icon, label, variant = "ghost", size = "md", classNa
       aria-label={label}
       variant={variant}
       size={size}
-      className={cn("px-0", size === "sm" ? "w-8" : size === "lg" ? "w-12" : "w-10", className)}
+      className={cn("px-0", size === "sm" ? "w-8 max-md:w-11" : size === "lg" ? "w-12" : "w-10 max-md:w-11", className)}
       {...props}
     >
       <Icon aria-hidden />

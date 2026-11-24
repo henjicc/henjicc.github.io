@@ -71,7 +71,13 @@ test("切换主题后重新打开还是选过的那套", async ({ page }) => {
   await page.goto("/");
   const html = page.locator("html");
   await expect(html).not.toHaveAttribute("data-theme", /.+/);
-  await page.getByRole("button", { name: "切换主题" }).click();
+  // 手机顶栏没有主题按钮，主题切换在菜单里
+  if ((page.viewportSize()?.width ?? 1280) < 768) {
+    await page.getByRole("button", { name: "菜单" }).click();
+    await page.getByRole("button", { name: "切换到夜雾" }).click();
+  } else {
+    await page.getByRole("button", { name: "切换主题" }).click();
+  }
   await expect(html).toHaveAttribute("data-theme", "night");
   await page.reload();
   await expect(html).toHaveAttribute("data-theme", "night");

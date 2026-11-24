@@ -41,12 +41,12 @@ function useModKey(): string {
   return hydrated && /Mac|iPhone|iPad/.test(navigator.userAgent) ? "⌘" : "Ctrl";
 }
 
-function ThemeButton({ scene }: { scene: boolean }) {
+function ThemeButton({ scene, className }: { scene: boolean; className?: string }) {
   return (
     <Button
       variant="ghost"
       aria-label="切换主题"
-      className={cn("w-10 px-0", scene && "text-on-scene hover:not-disabled:bg-mist")}
+      className={cn("w-10 px-0 max-md:w-11", scene && "text-on-scene hover:not-disabled:bg-mist", className)}
       onClick={(e) => toggleTheme(originOf(e.currentTarget))}
     >
       <Sun aria-hidden className="dawn:hidden" />
@@ -62,11 +62,12 @@ function MobileMenu({ scene }: { scene: boolean }) {
   const [loaded, setLoaded] = useState(false);
   return (
     <>
+      {/* 菜单开着时整页（包括这个按钮）被 Radix 设成不可点，点它其实是点在菜单外面，菜单照样会关上 */}
       <IconButton
         icon={Menu}
-        label="菜单"
+        label={open ? "关闭菜单" : "菜单"}
         aria-expanded={open}
-        className={cn("md:hidden", scene && "text-on-scene hover:not-disabled:bg-mist")}
+        className={cn("menu-x md:hidden", scene && "text-on-scene hover:not-disabled:bg-mist")}
         onClick={() => {
           setLoaded(true);
           setOpen(true);
@@ -86,14 +87,15 @@ export function SiteHeader({ mode, tool, className }: { mode: HeaderMode; tool?:
   const scene = mode === "scene";
   const nav = isToy ? [] : sitePages.filter((p) => p.inNav);
   return (
-    <header data-vt className={cn("sticky top-0 z-30 [view-transition-name:site-head]", className)}>
+    // 工具全屏时整页（html）进入全屏，轻提示和弹窗才能显示出来；顶栏在全屏里收起
+    <header data-vt className={cn("sticky top-0 z-30 [view-transition-name:site-head] [:root:fullscreen_&]:hidden", className)}>
       <div
         className={cn(
           "flex h-16 items-center gap-8 border-b pr-[max(var(--space-4),env(safe-area-inset-right))] pl-[max(var(--space-4),env(safe-area-inset-left))] transition-[background-color,border-color,color] duration-(--dur-base) ease-out md:px-12",
           modeClass[mode],
         )}
       >
-        <Link to="/" viewTransition className="focus-ring flex items-center gap-3 rounded-sm text-[16px] font-bold tracking-[0.02em] whitespace-nowrap">
+        <Link to="/" viewTransition className="focus-ring flex min-h-11 items-center gap-3 rounded-sm text-[16px] font-bold tracking-[0.02em] whitespace-nowrap">
           <Logo size={24} />
           <span>痕继痕迹</span>
         </Link>
@@ -164,7 +166,8 @@ export function SiteHeader({ mode, tool, className }: { mode: HeaderMode; tool?:
             className={cn("md:hidden", scene && "text-on-scene hover:not-disabled:bg-mist")}
             onClick={() => setPaletteOpen(true)}
           />
-          <ThemeButton scene={scene} />
+          {/* 手机顶栏只留 Logo、搜索和菜单，主题切换收进菜单；TOY 没有菜单，主题按钮留在顶栏 */}
+          <ThemeButton scene={scene} className={nav.length ? "max-md:hidden" : undefined} />
           {nav.length ? <MobileMenu scene={scene} /> : null}
         </div>
       </div>

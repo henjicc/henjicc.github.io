@@ -16,9 +16,10 @@ const buttonVariants = cva(
         mist: "border-mist-line bg-mist text-on-scene shadow-inner-light backdrop-blur-(--blur-mist) hover:not-disabled:bg-mist-strong",
         danger: "border-line bg-transparent text-ember hover:not-disabled:border-transparent hover:not-disabled:bg-ember-soft",
       },
+      // 手机上可点区域不小于 44×44（设计系统“体验”一节），sm 和 md 在窄屏都拉到 44 高
       size: {
-        sm: "h-8 rounded-sm px-3 text-caption [&_svg]:size-4",
-        md: "h-10 rounded-md px-4 text-ui [&_svg]:size-[18px]",
+        sm: "h-8 rounded-sm px-3 text-caption max-md:h-11 [&_svg]:size-4",
+        md: "h-10 rounded-md px-4 text-ui max-md:h-11 [&_svg]:size-[18px]",
         lg: "h-12 rounded-md px-6 text-body [&_svg]:size-[18px]",
       },
       done: { true: "text-moss" },

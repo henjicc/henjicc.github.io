@@ -5,10 +5,12 @@ import { singleToolId } from "./env";
  * 路由的 handle：页面告诉外壳该怎么摆顶栏和页脚。网站在路由模块里 `export const handle`，TOY 在路由表里写同样的对象。
  * - header：scene 是首页首屏和 404 那种透明顶栏压在照片上，滚动后变实；默认 solid。
  * - tool：工具页。顶栏换成面包屑，没有页脚；手机上整页交给工具外壳。
+ * - footer：false 时不放页脚，如 404 那种正好一屏、不该能滚动的页面。
  */
 export type ShellHandle = {
   header?: "scene" | "solid";
   tool?: boolean;
+  footer?: boolean;
 };
 
 export function useShellRoute(): { handle: ShellHandle; toolId: string | null } {

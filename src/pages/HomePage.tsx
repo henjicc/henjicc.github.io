@@ -7,6 +7,7 @@ import { formatDate } from "~/content/videos";
 import { ExternalLink } from "~/shell/links";
 import { tools } from "~/tools/registry";
 import { Button } from "~/ui/button";
+import { cn } from "~/ui/lib/utils";
 import { MistPanel } from "~/ui/mist-panel";
 import { ChannelStats } from "./ChannelStats";
 import { sceneStyle } from "./scene";
@@ -60,10 +61,21 @@ export function HomePage({ data }: { data: VideosFile }) {
       <div className="wrap">
         {recent.length ? (
           <Section title="最近的视频" link={{ to: "/works/", label: "全部视频" }}>
-            {/* 手机上横向滑动并按卡片吸附，左右贴到屏幕边 */}
+            {/* 手机上横向滑动并按卡片吸附，左右贴到屏幕边。桌面上第一张跨两列做大卡：
+                三列时再跨两行，六张正好排满三行；两列时第一张占满一行，最后一张藏起来免得单独剩半行 */}
             <div className="-mx-4 grid snap-x snap-mandatory scroll-px-4 auto-cols-[264px] grid-flow-col gap-4 overflow-x-auto px-4 pb-2 [scrollbar-width:none] md:mx-0 md:auto-cols-auto md:grid-flow-row md:grid-cols-2 md:gap-x-6 md:gap-y-10 md:overflow-visible md:px-0 md:pb-0 min-[68.75rem]:grid-cols-3">
-              {recent.slice(0, 6).map((v) => (
-                <VideoItem key={v.bvid} video={v} fetchedAt={data.fetchedAt} className="snap-start" sizes="(min-width: 1100px) 384px, (min-width: 768px) 50vw, 264px" />
+              {recent.slice(0, 6).map((v, i) => (
+                <VideoItem
+                  key={v.bvid}
+                  video={v}
+                  fetchedAt={data.fetchedAt}
+                  className={cn(
+                    "snap-start",
+                    i === 0 && "md:col-span-2 md:[&_h3]:text-title-3 min-[68.75rem]:row-span-2",
+                    i === 5 && "md:max-[68.75rem]:hidden",
+                  )}
+                  sizes={i === 0 ? "(min-width: 768px) 792px, 264px" : "(min-width: 1100px) 384px, (min-width: 768px) 50vw, 264px"}
+                />
               ))}
             </div>
           </Section>
@@ -82,7 +94,7 @@ function Section({ title, note, link, children }: { title: string; note?: string
       <div className="mb-5 flex flex-wrap items-baseline gap-x-4 gap-y-1 md:mb-8">
         <h2 className="m-0 text-title-2 md:text-title-1">{title}</h2>
         {note ? <span className="text-ui font-normal text-ink-muted">{note}</span> : null}
-        <Link to={link.to} viewTransition className="focus-ring ml-auto inline-flex items-center gap-1.5 rounded-xs text-ui text-sky-text">
+        <Link to={link.to} viewTransition className="focus-ring ml-auto inline-flex items-center gap-1.5 rounded-xs text-ui text-sky-text max-md:min-h-11">
           {link.label}
           <ArrowRight aria-hidden className="size-4" />
         </Link>

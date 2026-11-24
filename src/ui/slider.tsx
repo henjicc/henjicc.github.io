@@ -1,5 +1,5 @@
 import { Slider as SliderPrimitive } from "radix-ui";
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { cn } from "~/ui/lib/utils";
 
 type SliderProps = {
@@ -30,9 +30,16 @@ function snap(raw: number, min: number, max: number, step: number) {
 function Slider({ label, value, onValueChange, min = 0, max = 100, step = 1, unit = "", format, disabled, editable, resetValue, className }: SliderProps) {
   const id = useId();
   const [draft, setDraft] = useState<string | null>(null);
+  // Esc 要放弃输入：blur 时 onBlur 读到的还是这一帧的 draft，光 setDraft(null) 拦不住它被提交
+  const cancelled = useRef(false);
   const shown = format ? format(value) : `${value}${unit}`;
 
   function commit() {
+    if (cancelled.current) {
+      cancelled.current = false;
+      setDraft(null);
+      return;
+    }
     if (draft === null) return;
     const n = Number(draft.trim());
     if (draft.trim() !== "" && Number.isFinite(n)) onValueChange(snap(n, min, max, step));
@@ -59,7 +66,9 @@ function Slider({ label, value, onValueChange, min = 0, max = 100, step = 1, uni
               onKeyDown={(e) => {
                 if (e.key === "Enter") e.currentTarget.blur();
                 if (e.key === "Escape") {
-                  setDraft(null);
+                  // 这一下只是取消输入，不连手机抽屉一起收起（抽屉会跳过 defaultPrevented 的 Esc）
+                  e.preventDefault();
+                  cancelled.current = true;
                   e.currentTarget.blur();
                 }
               }}
@@ -83,7 +92,7 @@ function Slider({ label, value, onValueChange, min = 0, max = 100, step = 1, uni
         max={max}
         step={step}
         disabled={disabled}
-        className="relative flex h-6 w-full cursor-pointer touch-none items-center select-none data-disabled:cursor-not-allowed"
+        className="relative flex h-6 w-full cursor-pointer max-md:h-11 touch-none items-center select-none data-disabled:cursor-not-allowed"
       >
         <SliderPrimitive.Track className="relative h-1 grow overflow-hidden rounded-xs bg-line">
           <SliderPrimitive.Range className="absolute h-full bg-sky" />

@@ -21,7 +21,7 @@ export type PrimaryAction = {
 };
 
 export type ToolShellProps = {
-  tool: Pick<ToolMeta, "id" | "name" | "icon">;
+  tool: Pick<ToolMeta, "id" | "name" | "icon" | "local">;
   /** 控制栏：一组 <ControlGroup>。桌面在左侧 320px 的栏里，手机在底部抽屉里。 */
   controls: ReactNode;
   /** 手机抽屉收起时露出的一行摘要，如“名单 10 人 · 已抽 1 人”。 */
@@ -47,8 +47,14 @@ export type ToolShellProps = {
 export type ToolLayoutProps = ToolShellProps & {
   fullscreen: boolean;
   toggleFullscreen: () => void;
-  setRoot: (el: HTMLDivElement | null) => void;
+  /** 舞台元素：切换全屏后焦点放回这里，空格才能接着控制主操作。 */
+  setStage: (el: HTMLElement | null) => void;
 };
+
+/** 工具页脚的一句话：文件去哪了。每个工具只说一次，不在控件旁边反复说。 */
+export function privacyNote(tool: Pick<ToolMeta, "local">): string {
+  return tool.local === false ? "文件内容会发送到你配置的接口" : "处理都在你的浏览器里，文件不会上传";
+}
 
 /**
  * 工具外壳：每个工具都用它，只换控制栏和舞台里的东西。按视口宽度选桌面布局（控制栏 + 舞台 + 操作栏）
@@ -57,7 +63,7 @@ export type ToolLayoutProps = ToolShellProps & {
 export function ToolShell(props: ToolShellProps) {
   const mobile = useIsMobile();
   const [fullscreen, setFullscreen] = useState(false);
-  const root = useRef<HTMLDivElement | null>(null);
+  const stage = useRef<HTMLElement | null>(null);
   const { onImmersiveChange, primary } = props;
 
   useEffect(
@@ -71,13 +77,16 @@ export function ToolShell(props: ToolShellProps) {
 
   const toggleFullscreen = useCallback(() => {
     const next = !fullscreen;
-    // 桌面只把工具本身全屏；手机上整页本来就是工具
-    void platform.setImmersive(next, mobile ? null : root.current).then((ok) => {
+    // 整页（html）进入全屏，顶栏和控制栏用样式收起。只把工具根节点全屏的话，挂在 body 上的轻提示和弹窗
+    // （Sonner、Radix 的 Portal）都在全屏元素外面，全屏时看不到。
+    void platform.setImmersive(next, null).then((ok) => {
       if (!ok) return;
       setFullscreen(next);
       onImmersiveChange?.(next);
+      // 焦点还在全屏按钮上的话，接着按空格会再切一次全屏，而不是控制工具
+      stage.current?.focus({ preventScroll: true });
     });
-  }, [fullscreen, mobile, onImmersiveChange]);
+  }, [fullscreen, onImmersiveChange]);
 
   // 离开工具页时退出全屏
   useEffect(
@@ -93,8 +102,8 @@ export function ToolShell(props: ToolShellProps) {
     ...props,
     fullscreen,
     toggleFullscreen,
-    setRoot: (el) => {
-      root.current = el;
+    setStage: (el) => {
+      stage.current = el;
     },
   };
   return mobile ? <MobileToolLayout {...layout} /> : <DesktopToolLayout {...layout} />;

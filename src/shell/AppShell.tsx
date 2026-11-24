@@ -27,6 +27,11 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   useEffect(() => setImagePresenter(setPreviewSrc), []);
 
+  // 外壳整个页面生命周期都在，不用取消监听
+  useEffect(() => {
+    void import("./theme-color").then((m) => m.watchThemeColor());
+  }, []);
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
@@ -49,7 +54,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         />
       )}
       <main>{children}</main>
-      {handle.tool ? null : <Footer />}
+      {handle.tool || handle.footer === false ? null : <Footer />}
       {/* 水合后才挂：轻提示只会在用户操作之后出现，那时它早就加载好了 */}
       {/* 每个浮层单独一个 Suspense：后加载的那个不会让已经挂好的轻提示被换掉 */}
       {hydrated ? (

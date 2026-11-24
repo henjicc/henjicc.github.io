@@ -10,12 +10,13 @@ template_version: 27
 
 ## 目标与边界
 
-- 产品：B 站 AI 科技区 UP 主「痕继痕迹」的个人主页 henjihenji.com，加上作者自己写的一些纯前端小工具。访客多是观众，来这里看作品、找关注入口、用小工具。
-- 产品形态：纯静态网站，没有后端。所有处理都在访客浏览器里完成，不上传用户文件。
-- 已批准的计划（2026-11-24 用户确认）：整体重构，尚未开始实现。
-  - 一个仓库、一个域名：主页在 `/`，作品在 `/videos/`，工具统一在 `/tools/<id>/`。水印工具和批量 LLM 文本处理器的源码迁进本仓库；旧地址 `wmt.henjihenji.com` 用 Cloudflare 重定向规则 301 到新地址，确认新地址可用后再删除对应的独立 Pages 项目。
+- 产品：B 站 AI 科技区 UP 主「痕继痕迹」的个人主页 henjihenji.com。它是作品集和工具站的混合体：介绍本人，放视频和其他作品（以后会有摄影等），也是作者自己写的纯前端小工具的家。
+- 产品形态：纯静态，没有后端。所有处理都在访客浏览器里完成，不上传用户文件。
+- 已批准的计划（2026-11-24 用户确认），尚未开工。**做法以 [`docs/development-plan.md`](../docs/development-plan.md) 为准**，要点：
+  - 同一份代码发布到两个目标：网站（henjihenji.com，Cloudflare Pages，全部内容）和 B 站 TOY（只放工具：工具箱合集和单个工具）。两者的差异只放在平台适配层里。
+  - 一个仓库、一个域名：主页 `/`，作品 `/works/`，工具 `/tools/<id>/`，关于 `/about/`。水印工具和批量 LLM 文本处理器的源码迁进本仓库；`wmt.henjihenji.com` 用 Cloudflare 重定向规则 301 到新地址，确认可用后再删除对应的独立 Pages 项目。
   - 按“雾林设计系统”重新设计全部页面和工具，视觉完全统一（见下方“设计系统”）。
-  - 迁移顺序和每一步的上线方式写在设计系统的“工程落地”一节，每一步都能单独上线。
+  - 分阶段上线，第 0 阶段先在 TOY 上验证几件文档里确认不了的事。
 - 明确不做：常用软件 / 装机清单（2026-11-24 用户决定整体去掉，重构后不再保留现在主页的“常用软件”弹窗）。
 - 还没定、但不阻塞的事：GitHub Pages 是关掉还是只放一个跳转页（迁移最后一步再定）。
 - 现状（2026-11 核实）：
@@ -36,22 +37,13 @@ template_version: 27
 
 ## 按职责指定的库（已批准，尚未安装）
 
-版本以将来的锁文件为准。
-
-- 站点框架：Astro；页面过渡用 Astro 的 `<ClientRouter />`。
-- 交互组件：React（只在工具页和命令面板里用）。
-- 样式：Tailwind CSS v4，用 `@theme` 映射雾林令牌。
-- 基础组件：shadcn/ui，按雾林令牌改样式；命令面板用它的 Command（cmdk），轻提示用 Sonner。
-- 图标：Lucide。
-- 动画：Motion（`motion/react`），只在 React 组件里用。
-- 工具内状态：Zustand（带 persist，每个工具一个 store）。
-- 字体：MiSans 网页字体，按字切片、自托管；页脚注明“字体：MiSans”，这是许可要求。
-- 测试：Vitest（工具的纯逻辑）、Playwright（冒烟）。
+以 [`docs/development-plan.md`](../docs/development-plan.md) 第 2 节的表为准，版本以将来的锁文件为准。核心是 React + TypeScript、React Router 7（框架模式，网站预渲染、TOY 用内存路由）+ Vite、Tailwind CSS v4、shadcn/ui、Lucide、Motion、Zustand、Zod、Vitest、Playwright。2026-11-24 用户同意从 Astro 改为这一套。
 
 ## 部署与权威入口
 
-- Cloudflare Pages 项目 `henji`（henjicc 这个 Cloudflare 账户）连接本仓库：生产分支 `main`，自动部署；构建命令为空，输出就是仓库根目录。域名为 `henjihenji.com`、`www.henjihenji.com`、`henji.pages.dev`，DNS 也托管在这个账户。另一个 Cloudflare 账户里没有本站。重构上线时把构建命令改为 `npm run build`、输出目录改为 `dist`。
+- Cloudflare Pages 项目 `henji`（henjicc 这个 Cloudflare 账户）连接本仓库：生产分支 `main`，自动部署；构建命令为空，输出就是仓库根目录。域名为 `henjihenji.com`、`www.henjihenji.com`、`henji.pages.dev`，DNS 也托管在这个账户。另一个 Cloudflare 账户里没有本站。重构上线时把构建命令改为 `npm run build:web`、输出目录改为 `build/client`。
 - GitHub Pages（`henjicc.github.io`）也直接发布仓库根目录，和 Cloudflare 是同一份内容。
+- B 站 TOY：还没有发布过。发布一律走 `bili-toy-publisher` 技能（先预览、用户确认后再创建或更新，每次都要过审核）；每个 TOY 的 id 和路径记在 `toy/<目标>/toy.yaml`，路径发布后不能改。
 - 品牌：Logo 是 `index.html` 里内联的 SVG（“C”形线框），`icons/favicon.svg` 是网站图标。品牌色是 Logo 渐变里的天蓝，rgb(0,160,234) → rgb(6,182,255)，设计系统里叫 `sky`。
 - 社交链接（B 站、YouTube、小红书、抖音）写在 `index.html` 的“关注我”弹窗里；这些是作者公开的主页地址，属于网站内容。
 - 允许提交媒体的目录以 `.githooks/media-allowlist` 为准：`imgs/`（主页背景图，也是设计系统里的场景照片）、`icons/`（网站图标）、`tools/*/icons/`（工具图标）。
@@ -63,6 +55,7 @@ template_version: 27
 - 工具链接要写成目录路径（`./tools/random-picker/`）。2025-12 写成 `.../index.html` 时线上打不开，改成目录路径后正常。
 - `package.json` 的 `build` 脚本指向已经删掉的 `tools/watermark-tool` 子模块，跑不起来。Pages 的构建命令为空，所以线上不受影响。重构时替换掉。
 - 浏览器本地存储按域名隔开。工具从子域名搬到主站后，访客在旧地址存的设置不会带过来。
+- **TOY 和网站不是同一种运行环境**：页面跑在 `/toy/<路径>/` 下，只能用相对路径；不支持 `#` 跳转，也不能用 `pushState` 改地址；直接写的外部链接会被平台改写坏；包体建议在 20MB 以内。所以页面和工具不能直接用 `window.open`、`localStorage`、`location`，统一走平台适配层（见开发方案第 3 节）。TOY 是否和 B 站主站同源、能否请求第三方接口还没验证，验证前不往 TOY 的本地存储里放任何密钥。
 - 根目录的 `henjicc.github.io.zip` 是用户自己的备份，未跟踪。不要提交，也不要删除。
 - `.trae/` 是以前用 Trae 编辑器留下的笔记，已被忽略。
 

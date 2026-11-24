@@ -7,6 +7,7 @@ import {
   localStore,
   onFullscreenChange,
   openWindow,
+  readLocalJson,
   selectContents,
 } from "./browser";
 import type { Platform } from "./contract";
@@ -47,6 +48,9 @@ export function createWebPlatform(): Platform {
       settings: localStore,
       local: localStore,
       async flush() {},
+      async legacy(key) {
+        return readLocalJson(key);
+      },
     },
     setImmersive: browserFullscreen,
     onImmersiveChange: onFullscreenChange,

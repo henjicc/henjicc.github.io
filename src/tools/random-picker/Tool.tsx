@@ -1,5 +1,6 @@
 import { FileUp, Shuffle, Square } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useIsMobile } from "~/shell/media";
 import { ControlGroup } from "~/shell/tool/ControlGroup";
 import { useStoresHydrated } from "~/shell/tool/persist";
 import { ToolShell } from "~/shell/tool/ToolShell";
@@ -48,6 +49,7 @@ function NumberGenerator({ onGenerate }: { onGenerate: (names: string[]) => void
 
 export default function RandomPicker() {
   const ready = useStoresHydrated(persistedStores);
+  const mobile = useIsMobile();
   const { noRepeat, intervalMs, fontScale } = useSettings();
   const { namesText, picked } = useSession();
   const [rolling, setRolling] = useState<string | null>(null);
@@ -148,8 +150,24 @@ export default function RandomPicker() {
     </div>
   );
 
+  const canClearPicked = picked.length > 0 && !running;
+  const clearPicked = (
+    <Button variant="ghost" size={mobile ? "sm" : "md"} onClick={() => setPicked([])}>
+      清空记录
+    </Button>
+  );
+
+  // 手机底栏只放主按钮，让它占满整行；“清空记录”挪进抽屉
   const controls = (
     <>
+      {mobile && canClearPicked ? (
+        <ControlGroup title="抽取记录">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-ui text-ink">已抽 {picked.length} 人</span>
+            {clearPicked}
+          </div>
+        </ControlGroup>
+      ) : null}
       <ControlGroup title="名单">
         <div className="grid gap-2">
           <label htmlFor="picker-names" className="text-ui text-ink">
@@ -211,13 +229,7 @@ export default function RandomPicker() {
           <span>已抽 {picked.length} 人</span>
         </>
       }
-      actions={
-        picked.length && !running ? (
-          <Button variant="ghost" onClick={() => setPicked([])}>
-            清空记录
-          </Button>
-        ) : null
-      }
+      actions={!mobile && canClearPicked ? clearPicked : null}
       primary={{
         label: running ? "停下" : "开始抽取",
         icon: running ? Square : Shuffle,

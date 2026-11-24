@@ -42,6 +42,11 @@ export interface Platform {
     local(namespace: string): KeyValueStore;
     /** 立即写出所有还没发送的设置。 */
     flush(): Promise<void>;
+    /**
+     * 只有网站有：读重构前的旧站点在同一域名下写的 localStorage 原始键（不带 henji: 前缀），用于一次性导入旧数据。
+     * 只读不写，旧键留着不动。TOY 从来没有旧数据，所以没有这个方法。
+     */
+    legacy?(key: string): Promise<unknown>;
   };
   /** 全屏。网站把 element（默认整页）切到浏览器全屏；TOY 切 App 的沉浸模式。返回是否成功。 */
   setImmersive(on: boolean, element?: HTMLElement | null): Promise<boolean>;

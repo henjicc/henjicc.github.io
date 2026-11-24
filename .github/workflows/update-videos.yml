@@ -1,0 +1,26 @@
+# 每天触发一次 Cloudflare Pages 重新构建，构建时拉取最新的 B 站视频数据（scripts/fetch-videos.ts）。
+# 部署钩子地址存在仓库 Secret CF_PAGES_DEPLOY_HOOK 里，相当于密钥，不写进仓库；没配置时只提示，不报错。
+name: 更新视频数据
+
+on:
+  schedule:
+    - cron: "0 22 * * *" # UTC 22:00 = 北京时间 06:00
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  deploy-hook:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: 触发 Cloudflare Pages 构建
+        env:
+          HOOK: ${{ secrets.CF_PAGES_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "::notice::没有配置 CF_PAGES_DEPLOY_HOOK，跳过"
+            exit 0
+          fi
+          curl --fail --silent --show-error --max-time 30 -X POST "$HOOK" > /dev/null
+          echo "已触发构建"

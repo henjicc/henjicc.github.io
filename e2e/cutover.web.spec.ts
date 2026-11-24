@@ -48,7 +48,7 @@ test("随机抽取的“清空记录”：桌面在操作栏，手机在抽屉�
   await expect(clear).toHaveCount(0);
 });
 
-// 旧站点的随机抽取注册过缓存优先的 Service Worker（main 分支的 tools/random-picker/service-worker.js）。
+// 旧站点的随机抽取注册过缓存优先的 Service Worker（tools/random-picker/service-worker.js，已从仓库删除）。
 // 这里先用旧文件让浏览器装上它，再把同一个地址换成新的构建结果，确认刷新后看到的是新页面、旧 Worker 已注销。
 base.describe("旧 Service Worker", () => {
   base.skip(({ isMobile }) => isMobile, "和视口无关，只在桌面跑一次");
@@ -65,13 +65,15 @@ base.describe("旧 Service Worker", () => {
     ".woff2": "font/woff2",
     ".data": "text/x-script",
   };
+  // 旧站点文件还在的最后一个提交；之后的提交删掉了它们，测试从这里读旧页面和旧 Worker
+  const LEGACY_COMMIT = "1da226b29080714148d1c03a0e61dc9282a6be77";
   let mode: "old" | "new" = "old";
   let server: Server;
   let origin = "";
 
   function oldFile(path: string): Buffer | null {
     try {
-      return execFileSync("git", ["show", `main:${path}`], { stdio: ["ignore", "pipe", "ignore"] });
+      return execFileSync("git", ["show", `${LEGACY_COMMIT}:${path}`], { stdio: ["ignore", "pipe", "ignore"] });
     } catch {
       return null;
     }
@@ -88,7 +90,7 @@ base.describe("旧 Service Worker", () => {
   }
 
   base.beforeAll(async () => {
-    base.skip(!oldFile("tools/random-picker/service-worker.js"), "没有 main 分支的旧站点文件");
+    base.skip(!oldFile("tools/random-picker/service-worker.js"), "取不到旧站点所在的提交（如浅克隆）");
     server = createServer((req, res) => {
       const path = new URL(req.url ?? "/", "http://localhost").pathname;
       if (mode === "old") {

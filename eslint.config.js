@@ -16,10 +16,6 @@ export default tseslint.config(
       "playwright-report/",
       "test-results/",
       ".local/",
-      // 旧站点文件，切换上线时删除
-      "js/",
-      "tools/",
-      "script.js",
     ],
   },
   js.configs.recommended,

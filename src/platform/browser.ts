@@ -81,14 +81,30 @@ export async function downloadCanvas(canvas: HTMLCanvasElement, filename: string
   downloadBlob(blob, filename);
 }
 
-/** 老办法复制：选中一个看不见的文本框再执行 copy。TOY 里剪贴板接口被拒时它通常还能用。 */
+const DIALOG = '[role="dialog"], [role="alertdialog"], dialog[open]';
+
+/**
+ * 文本框要放进当前打开的对话框里：Radix 对话框的焦点陷阱会把框外元素拿到的焦点抢回去，
+ * 选区就落不到文本框上，复制出来是空的。
+ */
+function copyHost(): HTMLElement {
+  const active = document.activeElement;
+  const inDialog = active instanceof HTMLElement ? active.closest<HTMLElement>(DIALOG) : null;
+  if (inDialog) return inDialog;
+  const open = document.querySelectorAll<HTMLElement>(DIALOG);
+  return open[open.length - 1] ?? document.body;
+}
+
+/** 老办法复制：选中一个看不见的文本框再执行 copy。TOY 里剪贴板接口被拒时它通常还能用。复制完把焦点还给原来的元素。 */
 export function execCopy(text: string): boolean {
+  const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const area = document.createElement("textarea");
   area.value = text;
   area.readOnly = true;
   // 16px 防止 iOS 聚焦时放大页面；移出视口但保持可选中
   area.style.cssText = "position:fixed;top:0;left:-9999px;opacity:0;font-size:16px";
-  document.body.append(area);
+  copyHost().append(area);
+  area.focus({ preventScroll: true });
   area.select();
   area.setSelectionRange(0, text.length);
   try {
@@ -97,6 +113,7 @@ export function execCopy(text: string): boolean {
     return false;
   } finally {
     area.remove();
+    if (previous && previous !== document.body && previous.isConnected) previous.focus({ preventScroll: true });
   }
 }
 

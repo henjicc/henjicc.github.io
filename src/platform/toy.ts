@@ -44,21 +44,34 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T
   return Promise.race([promise, new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms))]);
 }
 
-const abilityCache = new Map<ToyAbility, Promise<boolean>>();
-function supports(ability: ToyAbility): Promise<boolean> {
-  let cached = abilityCache.get(ability);
-  if (!cached) {
-    const t = sdk();
-    cached = t?.isSupport
-      ? withTimeout(
-          t.isSupport(ability).then(Boolean, () => false),
-          SUPPORT_TIMEOUT,
-          false,
-        )
-      : Promise.resolve(false);
-    abilityCache.set(ability, cached);
+// 只缓存 SDK 真正给出的答案。超时和报错只让这一次调用当作不支持：App 刚启动时 SDK 可能还没准备好，
+// 缓存下来的话整个页面生命周期里这项能力都用不了。同时发起的调用共用一个请求；超时后下一次调用重新问，
+// 迟到的答案照样记下。
+const abilityCache = new Map<ToyAbility, boolean>();
+const abilityRequests = new Map<ToyAbility, Promise<boolean | undefined>>();
+async function supports(ability: ToyAbility): Promise<boolean> {
+  const known = abilityCache.get(ability);
+  if (known !== undefined) return known;
+  const t = sdk();
+  if (!t?.isSupport) return false;
+  let request = abilityRequests.get(ability);
+  if (!request) {
+    const created = t.isSupport(ability).then(
+      (answer) => {
+        abilityCache.set(ability, Boolean(answer));
+        return Boolean(answer);
+      },
+      () => undefined,
+    );
+    request = created;
+    abilityRequests.set(ability, created);
+    void created.then(() => {
+      if (abilityRequests.get(ability) === created) abilityRequests.delete(ability);
+    });
   }
-  return cached;
+  const answer = await withTimeout(request, SUPPORT_TIMEOUT, undefined);
+  if (answer === undefined && abilityRequests.get(ability) === request) abilityRequests.delete(ability);
+  return Boolean(answer);
 }
 
 function utf8Length(text: string): number {
@@ -74,22 +87,62 @@ function mirrorKey(namespace: string, key: string): string {
   return `${localKey(namespace, key)}@cloud`;
 }
 
-const pending = new Map<string, string>();
+/** 写入失败后的重试间隔：从 2 秒起翻倍，最多 1 分钟；被限频（错误码 307044）时至少等 10 秒。 */
+const RETRY_BASE = 2000;
+const RETRY_MAX = 60_000;
+const RATE_LIMIT_WAIT = 10_000;
+const RATE_LIMIT_CODE = 307044;
+
+/** 还没写到云端的值。gen 是这个键第几次修改，写入失败时用来判断有没有更新的值已经取代它。 */
+const pending = new Map<string, { raw: string; gen: number }>();
+const generations = new Map<string, number>();
 let flushTimer: ReturnType<typeof setTimeout> | undefined;
+let failures = 0;
+/** 在这之前不发起写入（重试退避或限频中）。 */
+let blockedUntil = 0;
 let listening = false;
+
+function scheduleFlush(delay: number): void {
+  clearTimeout(flushTimer);
+  flushTimer = setTimeout(() => void flushCloud(), Math.max(delay, blockedUntil - Date.now()));
+}
+
+// SDK 没有公开错误对象的结构，错误码可能在 code / errCode / errno 字段里，也可能只出现在消息文字里
+function isRateLimited(error: unknown): boolean {
+  if (error && typeof error === "object") {
+    const e = error as Record<string, unknown>;
+    if ([e.code, e.errCode, e.errno].some((c) => Number(c) === RATE_LIMIT_CODE)) return true;
+  }
+  return String((error as { message?: unknown } | null)?.message ?? error).includes(String(RATE_LIMIT_CODE));
+}
 
 async function flushCloud(): Promise<void> {
   clearTimeout(flushTimer);
   flushTimer = undefined;
   if (!pending.size) return;
-  const batch = Object.fromEntries(pending);
-  pending.clear();
+  // 退避中不发：页面隐藏时的立即写也一样，否则只会再撞一次限频
+  if (Date.now() < blockedUntil) {
+    scheduleFlush(0);
+    return;
+  }
+  // 云存储用不了（App 外、或这次没问到）时留在待写里，下次修改或页面隐藏时再试；本机镜像里一直有最新值
   const t = sdk();
   if (!t || !(await supports("setCloudStorage"))) return;
+  const sent = new Map(pending);
+  pending.clear();
   try {
-    await t.setCloudStorage(batch);
-  } catch {
-    // 频率限制或网络问题：本机镜像里有最新值，下次修改时会再写
+    await t.setCloudStorage(Object.fromEntries([...sent].map(([k, { raw }]) => [k, raw])));
+    failures = 0;
+    blockedUntil = 0;
+  } catch (error) {
+    // 放回待写；等待期间又改过的键已经有更新的值在排队，不能用旧值覆盖
+    for (const [key, entry] of sent) {
+      if (generations.get(key) === entry.gen && !pending.has(key)) pending.set(key, entry);
+    }
+    failures += 1;
+    const wait = Math.min(RETRY_MAX, RETRY_BASE * 2 ** (failures - 1));
+    blockedUntil = Date.now() + (isRateLimited(error) ? Math.max(wait, RATE_LIMIT_WAIT) : wait);
+    scheduleFlush(0);
   }
 }
 
@@ -119,14 +172,14 @@ function cloudStore(namespace: string): KeyValueStore {
       warnedKeys.add(ck);
       return;
     }
-    pending.set(ck, raw);
+    const gen = (generations.get(ck) ?? 0) + 1;
+    generations.set(ck, gen);
+    pending.set(ck, { raw, gen });
     listenForHide();
-    clearTimeout(flushTimer);
-    flushTimer = setTimeout(() => void flushCloud(), CLOUD_WRITE_DELAY);
+    scheduleFlush(CLOUD_WRITE_DELAY);
   }
   return {
     async get<T>(key: string) {
-      const local = readLocalJson<Envelope>(mirrorKey(namespace, key));
       let remote: Envelope | undefined;
       const t = sdk();
       if (t && (await supports("getCloudStorage"))) {
@@ -143,7 +196,8 @@ function cloudStore(namespace: string): KeyValueStore {
           remote = undefined;
         }
       }
-      // 两边都有时取更新的那份（另一台设备改过时云端更新）
+      // 等云端的这段时间里本机可能刚写过，所以读完云端再读镜像。两边都有时取更新的那份（另一台设备改过时云端更新）
+      const local = readLocalJson<Envelope>(mirrorKey(namespace, key));
       const pick = remote && (!local || remote.t > local.t) ? remote : local;
       if (pick && pick === remote) writeLocalJson(mirrorKey(namespace, key), remote);
       return (pick?.v ?? undefined) as T | undefined;

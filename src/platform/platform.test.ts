@@ -53,6 +53,53 @@ describe("copyText", () => {
   });
 });
 
+describe("复制时的焦点", () => {
+  it("对话框打开时文本框放进对话框里，复制完焦点回到原来的元素", async () => {
+    const dialog = document.createElement("div");
+    dialog.setAttribute("role", "dialog");
+    const button = document.createElement("button");
+    dialog.append(button);
+    document.body.append(dialog);
+    button.focus();
+    let host: Element | null = null;
+    let selected = "";
+    document.execCommand = vi.fn(() => {
+      const area = document.activeElement as HTMLTextAreaElement;
+      host = area.parentElement;
+      selected = area.value.slice(area.selectionStart, area.selectionEnd);
+      return true;
+    });
+    const { execCopy } = await import("./browser");
+    expect(execCopy("密钥")).toBe(true);
+    expect(host).toBe(dialog);
+    expect(selected).toBe("密钥");
+    expect(document.activeElement).toBe(button);
+    expect(dialog.querySelector("textarea")).toBeNull();
+    dialog.remove();
+  });
+});
+
+describe("TOY 能力判断", () => {
+  it("isSupport 超时只让这一次当作不支持，下次重新问", async () => {
+    vi.useFakeTimers();
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    const navigate = vi.fn(async () => {});
+    // 第一次一直不返回（App 刚启动 SDK 还没就绪），之后正常回答
+    const isSupport = vi.fn<() => Promise<boolean>>(() => new Promise(() => {}));
+    window.toy = { isSupport, navigate } as unknown as ToySdk;
+    const toy = await loadToy();
+    const first = toy.openBili("video", "BV1xx");
+    await vi.advanceTimersByTimeAsync(1600);
+    await first;
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(navigate).not.toHaveBeenCalled();
+    isSupport.mockImplementation(async () => true);
+    await toy.openBili("video", "BV1xx");
+    expect(navigate).toHaveBeenCalledWith({ type: "video", id: "BV1xx" });
+    expect(open).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("TOY 设置存储", () => {
   it("先写本机镜像；停止修改后合并成一次云端写入", async () => {
     vi.useFakeTimers();
@@ -105,6 +152,74 @@ describe("TOY 设置存储", () => {
     await expect(store.get("k")).resolves.toBe("云端");
     localStorage.setItem("henji:t:k@cloud", JSON.stringify({ t: 300, v: "本机新" }));
     await expect(store.get("k")).resolves.toBe("本机新");
+  });
+
+  it("写入失败时放回待写，已被更新值取代的键不放回；限频时至少等 10 秒再写", async () => {
+    vi.useFakeTimers();
+    const { sdk, setCloudStorage } = fakeSdk();
+    let rejectFirst: (error: unknown) => void = () => {};
+    setCloudStorage.mockImplementationOnce(
+      () =>
+        new Promise<void>((_, reject) => {
+          rejectFirst = reject;
+        }),
+    );
+    window.toy = sdk;
+    const store = (await loadToy()).storage.settings("t");
+    await store.set("a", 1);
+    await store.set("k", 1);
+    await vi.advanceTimersByTimeAsync(1300);
+    expect(setCloudStorage).toHaveBeenCalledTimes(1);
+    // 第一次写还没返回时 k 又改了
+    await store.set("k", 2);
+    rejectFirst({ code: 307044, message: "rate limit" });
+    await vi.advanceTimersByTimeAsync(9000);
+    expect(setCloudStorage).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(setCloudStorage).toHaveBeenCalledTimes(2);
+    const retry = setCloudStorage.mock.calls[1]?.[0] ?? {};
+    expect(JSON.parse(retry.t_a ?? "{}").v).toBe(1);
+    expect(JSON.parse(retry.t_k ?? "{}").v).toBe(2);
+  });
+
+  it("普通失败按退避重试，成功后不再写", async () => {
+    vi.useFakeTimers();
+    const { sdk, setCloudStorage, cloud } = fakeSdk();
+    setCloudStorage.mockRejectedValueOnce(new Error("network")).mockRejectedValueOnce(new Error("network"));
+    window.toy = sdk;
+    const store = (await loadToy()).storage.settings("t");
+    await store.set("k", "值");
+    await vi.advanceTimersByTimeAsync(1200);
+    expect(setCloudStorage).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(setCloudStorage).toHaveBeenCalledTimes(2);
+    // 第二次失败后等 4 秒
+    await vi.advanceTimersByTimeAsync(3900);
+    expect(setCloudStorage).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(setCloudStorage).toHaveBeenCalledTimes(3);
+    expect(JSON.parse(cloud.t_k ?? "{}").v).toBe("值");
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(setCloudStorage).toHaveBeenCalledTimes(3);
+  });
+
+  it("读云端期间本机写了新值时，返回本机的新值", async () => {
+    const { sdk } = fakeSdk();
+    let resolveCloud: (values: Record<string, string | undefined>) => void = () => {};
+    const getCloudStorage = vi.fn(
+      () =>
+        new Promise<Record<string, string | undefined>>((resolve) => {
+          resolveCloud = resolve;
+        }),
+    );
+    window.toy = { ...sdk, getCloudStorage } as unknown as ToySdk;
+    const store = (await loadToy()).storage.settings("t");
+    const reading = store.get("k");
+    await vi.waitFor(() => expect(getCloudStorage).toHaveBeenCalled());
+    await store.set("k", "本机新");
+    resolveCloud({ t_k: JSON.stringify({ t: 200, v: "云端旧" }) });
+    await expect(reading).resolves.toBe("本机新");
+    expect(JSON.parse(localStorage.getItem("henji:t:k@cloud") ?? "{}").v).toBe("本机新");
   });
 
   it("App 外没有 SDK 时退回本机存储", async () => {

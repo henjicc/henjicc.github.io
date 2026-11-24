@@ -1,6 +1,9 @@
-import { Moon, Sun } from "lucide-react";
+import { Moon, PlayCircle, Sun } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
+import { videoFile } from "~/content/video-data";
+import { formatDuration } from "~/content/videos";
+import { platform } from "~/platform";
 import { liveTools, toolPath } from "~/tools/lookup";
 import {
   CommandDialog,
@@ -10,6 +13,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+  CommandMeta,
 } from "~/ui/command";
 import { Kbd } from "~/ui/kbd";
 import { isToy, singleToolId } from "./env";
@@ -17,8 +21,12 @@ import { sitePages } from "./nav";
 import { setPaletteOpen, usePalette } from "./palette";
 import { resolveTheme, toggleTheme, useThemeStore } from "./theme";
 
-// 命令面板：按组列出小工具、页面和操作，输入时按名称和拼音首字母过滤（拼音写在登记表的 keywords 里）。
-// 按需加载（见 AppShell），所以 cmdk 不进首页首屏的包。
+// 命令面板：按组列出小工具、页面、视频和操作，输入时按名称和拼音首字母过滤（拼音写在登记表的 keywords 里）。
+// 按需加载（见 AppShell），所以 cmdk 和视频快照都不进首页首屏的包。
+// 页面排在视频前面：1440×900 下打开时“关于”不用滚动就能看到。
+
+/** 最近几期视频。TOY 里只放工具，没有这一组。 */
+const latestVideos = isToy ? [] : videoFile.videos.slice(0, 6);
 export default function CommandPalette() {
   const open = usePalette((s) => s.open);
   const choice = useThemeStore((s) => s.choice);
@@ -43,7 +51,8 @@ export default function CommandPalette() {
       }}
       label="搜索"
     >
-      <CommandInput value={query} onValueChange={setQuery} placeholder="搜索工具和页面" autoFocus />
+      {/* 不写 autoFocus：交给 Radix 聚焦第一个输入框，它才记得住打开前的焦点，关上时还回去 */}
+      <CommandInput value={query} onValueChange={setQuery} placeholder={isToy ? "搜索工具" : "搜索工具、视频和页面"} />
       <CommandList>
         <CommandEmpty>没有找到“{query}”</CommandEmpty>
         {tools.length ? (
@@ -62,6 +71,25 @@ export default function CommandPalette() {
               <CommandItem key={p.path} value={`page:${p.path}`} keywords={[p.label, ...p.keywords]} onSelect={() => go(p.path)}>
                 <p.icon aria-hidden />
                 <span>{p.label}</span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        ) : null}
+        {latestVideos.length ? (
+          <CommandGroup heading="视频">
+            {latestVideos.map((v) => (
+              <CommandItem
+                key={v.bvid}
+                value={`video:${v.bvid}`}
+                keywords={[v.title, v.bvid, "sp", "视频"]}
+                onSelect={() => {
+                  setPaletteOpen(false);
+                  void platform.openBili("video", v.bvid);
+                }}
+              >
+                <PlayCircle aria-hidden />
+                <span className="min-w-0 truncate">{v.title}</span>
+                <CommandMeta>{formatDuration(v.duration)}</CommandMeta>
               </CommandItem>
             ))}
           </CommandGroup>

@@ -6,6 +6,7 @@ import { useShellRoute } from "./handle";
 import { useHydrated, useIsMobile } from "./media";
 import { preloadPalette, togglePalette, usePalette } from "./palette";
 import { SiteHeader, useSceneHeaderMode } from "./SiteHeader";
+import { syncThemeColor } from "./theme";
 
 // 浮层和轻提示都按需加载：首页首屏的包里只有 React、路由和页面本身（目标 gzip ≤145KB，见开发方案第 11 节）。
 const CommandPalette = lazy(preloadPalette);
@@ -26,6 +27,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   const toolFullscreen = Boolean(handle.tool && hydrated && mobile);
 
   useEffect(() => setImagePresenter(setPreviewSrc), []);
+
+  useEffect(() => {
+    syncThemeColor();
+    // 跟随系统时，系统切换深浅色也要跟着换
+    const mq = window.matchMedia("(prefers-color-scheme: light)");
+    mq.addEventListener("change", syncThemeColor);
+    return () => mq.removeEventListener("change", syncThemeColor);
+  }, []);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -49,7 +58,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         />
       )}
       <main>{children}</main>
-      {handle.tool ? null : <Footer />}
+      {handle.tool || handle.footer === false ? null : <Footer />}
       {/* 水合后才挂：轻提示只会在用户操作之后出现，那时它早就加载好了 */}
       {/* 每个浮层单独一个 Suspense：后加载的那个不会让已经挂好的轻提示被换掉 */}
       {hydrated ? (

@@ -24,6 +24,7 @@ template_version: 27
   - 随机抽取：`tools/random-picker/`，原生 JS，带 PWA（`manifest.json`、`service-worker.js`），在本仓库里。
   - 水印工具：独立仓库 `henjicc/watermark-tool`（Vite + React + Tailwind），部署在单独的 Cloudflare Pages 项目 `watermark-tool`，绑定 `wmt.henjihenji.com`。主页的入口直接跳到这个子域名。
   - 批量 LLM 文本处理器：私有仓库 `henjicc/Batch-LLM-Text-Processor`（Vite + React + Zustand），在单独的 Pages 项目 `batch-llm-text-processor`，主页上没有入口。
+  - 转个格式：已发布的 B 站 TOY（路径 `gszh`，链接访问），纯前端的文件格式转换工具，源码在作者本机的另一个项目里，不在本仓库。
 
 ## 设计系统
 
@@ -43,7 +44,7 @@ template_version: 27
 
 - Cloudflare Pages 项目 `henji`（henjicc 这个 Cloudflare 账户）连接本仓库：生产分支 `main`，自动部署；构建命令为空，输出就是仓库根目录。域名为 `henjihenji.com`、`www.henjihenji.com`、`henji.pages.dev`，DNS 也托管在这个账户。另一个 Cloudflare 账户里没有本站。重构上线时把构建命令改为 `npm run build:web`、输出目录改为 `build/client`。
 - GitHub Pages（`henjicc.github.io`）也直接发布仓库根目录，和 Cloudflare 是同一份内容。
-- B 站 TOY：还没有发布过。发布用 B 站官方 Toy CLI（`toy create` / `toy update`，尚未安装），由 `npm run toy` 脚本先打包检查再调用；每个 TOY 的 id 和路径记在 `toy/<目标>.json`，路径发布后不能改。第 0 阶段的探针包在 `.local/toy-probe/`（不进仓库）。
+- B 站 TOY：已有“转个格式”（`gszh`）；第 0 阶段的探针“痕迹工具箱测试”（`henji-toy-probe`，密码访问，id 58660860469248）已提交审核。发布用 B 站官方 Toy CLI（`toy create` / `toy update`，尚未安装），由 `npm run toy` 脚本先打包检查再调用；每个 TOY 的 id 和路径记在 `toy/<目标>.json`，路径发布后不能改。第 0 阶段的探针包在 `.local/toy-probe/`（不进仓库）。
 - 品牌：Logo 是 `index.html` 里内联的 SVG（“C”形线框），`icons/favicon.svg` 是网站图标。品牌色是 Logo 渐变里的天蓝，rgb(0,160,234) → rgb(6,182,255)，设计系统里叫 `sky`。
 - 社交链接（B 站、YouTube、小红书、抖音）写在 `index.html` 的“关注我”弹窗里；这些是作者公开的主页地址，属于网站内容。
 - 允许提交媒体的目录以 `.githooks/media-allowlist` 为准：`imgs/`（主页背景图，也是设计系统里的场景照片）、`icons/`（网站图标）、`tools/*/icons/`（工具图标）。

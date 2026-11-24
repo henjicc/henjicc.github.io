@@ -1,0 +1,6 @@
+# 允许提交图片、视频、音频、字幕、办公文档和其他二进制文件的位置。
+# 每行一个从仓库根算起的路径前缀（可用通配符）；目录以 / 结尾，否则 assets 也会放行 assets-private/。
+# 只登记项目放资源、测试素材和文档配图的目录；规则见 rules/private-content.md。
+imgs/
+icons/
+tools/*/icons/

@@ -1,0 +1,205 @@
+#!/usr/bin/env bash
+# pre-commit 门禁的自测：在临时仓库里构造应拦和应放行的暂存内容，直接运行钩子并核对结果。
+# 改动 pre-commit 后，或换到新的系统上第一次使用时运行：.githooks/selftest
+# 本文件里的违规样例都在运行时拼出来，免得自己被门禁拦下。
+set -u
+
+hook=$(cd "$(dirname "$0")" && pwd)/pre-commit
+work=$(mktemp -d) || exit 1
+trap 'rm -rf "$work"' EXIT
+
+cd "$work" || exit 1
+mkdir -p outer/repo && cd outer/repo || exit 1
+git init -q
+git config user.name selftest
+git config user.email selftest@example.com
+git config commit.gpgsign false
+git config core.autocrlf false
+mkdir .githooks
+cp "$hook" .githooks/pre-commit
+chmod +x .githooks/pre-commit
+printf '\xef\xbb\xbf# 注释\r\n./assets/ \r\n' > .githooks/media-allowlist
+git config --add privatecheck.term "某客户项目"
+git config --add privatecheck.term "Zhang Wei"
+git config --add privatecheck.term 'X.y*(z)+[w]{2}|^$\?'
+git config --add privatecheck.path 'D:\Raw Footage\2024_proj.v2'
+printf 'seed\n' > seed.md
+printf 'old\n' > old.txt
+ln -s old.txt link.md
+git add -A && git commit -qm init || { echo "初始提交失败"; exit 1; }
+
+me=$(id -un)
+ME=$(printf '%s' "$me" | tr a-z A-Z)
+here=$(git rev-parse --show-toplevel)
+other=zhang$(printf san)
+U=/Users
+b64="data:image/png;base$(printf 64),iVBORw0KGgo="
+pass=0
+fail=0
+
+ok() { pass=$((pass + 1)); }
+bad() { fail=$((fail + 1)); echo "✗ $1"; }
+
+check() { # $1 = block 或 pass，$2 = 名称，$3 = 拦截时输出里应有的说明（可空）
+  local out rc got
+  out=$(.githooks/pre-commit 2>&1)
+  rc=$?
+  if [ $rc -eq 0 ]; then got=pass; else got=block; fi
+  if [ "$got" != "$1" ]; then
+    bad "$2：预期 $1，实际 $got"
+    [ -n "$out" ] && printf '%s\n' "$out" | sed 's/^/      /'
+  elif [ "$1" = block ] && [ -n "${3:-}" ] && ! printf '%s' "$out" | grep -qF -- "$3"; then
+    bad "$2：拦截原因不对，应含“$3”"
+    printf '%s\n' "$out" | sed 's/^/      /'
+  else
+    ok
+  fi
+  git reset -q --hard HEAD
+  git clean -qfdx
+}
+
+case_() { # $1 = block 或 pass，$2 = 名称，$3 = 说明，$4 = 文件路径，$5 = 文件内容
+  mkdir -p "$(dirname "$4")"
+  printf '%s\n' "$5" > "$4"
+  git add -A -f
+  check "$1" "$2" "$3"
+}
+
+# ── 应拦：媒体与二进制 ──
+case_ block "白名单外的图片"        "媒体或文档" shot.PnG          x
+case_ block "白名单外的音频"        "媒体或文档" rec.wav           x
+case_ block "白名单外的字幕"        "媒体或文档" 口播.srt          x
+case_ block "白名单外的文档"        "媒体或文档" "docs/报 价.pdf"  x
+case_ block "相似目录名不算白名单"  "媒体或文档" assets-private/a.png x
+printf 'PK\003\004\000\000binary' > footage.zip; git add -A
+check block "白名单外的压缩包" "二进制文件"
+printf '\377\376s\000e\000c\000r\000e\000t\000' > u16.txt; git add -A
+check block "UTF-16 文本" "二进制文件"
+
+# ── 应拦：本机信息 ──
+case_ block "主目录 /"              "本机用户主目录" a.md   "see $U/$me/Movies"
+case_ block "主目录 \\"             "本机用户主目录" a.md   "see C:\\Users\\$me\\Desktop"
+case_ block "主目录 \\\\"           "本机用户主目录" a.json "{\"p\":\"C:\\\\Users\\\\$me\\\\x\"}"
+case_ block "主目录 URL 编码"       "本机用户主目录" a.md   "file:///C%3A%5CUsers%5C$me%5Cx"
+case_ block "主目录 会话目录写法"   "本机用户主目录" a.md   "projects/-Users-$me-Documents-x"
+case_ block "主目录 句末带点"       "本机用户主目录" a.md   "log in -Users-$me.jsonl"
+case_ block "Linux 主目录"          "本机用户主目录" a.md   "/home/$me/x"
+case_ block "Linux 会话目录写法"    "本机用户主目录" a.md   "projects/-home-$me-x"
+case_ block "主目录与变量同行"      "本机用户主目录" a.md   "cd \$HOME && ls /home/$me/x"
+case_ block "仓库所在目录"          ""               a.md   "repo at $here/src"
+case_ block "登记的词条"            "私人词条"       a.md   "为某客户项目做的"
+case_ block "词条不分大小写"        "私人词条"       a.md   "by zhang wei"
+case_ block "文件名里的词条"        "私人词条"       "某客户项目.txt" x
+case_ block "词条里的正则符号按原文" "私人词条"      a.md   'see x.Y*(Z)+[W]{2}|^$\? here'
+case_ block "登记的路径 \\"         "私人路径"       a.md   'D:\Raw Footage\2024_proj.v2\clip'
+case_ block "登记的路径 / 小写"     "私人路径"       a.md   "d:/raw footage/2024_proj.v2/clip"
+case_ block "登记的路径 句末带点"   "私人路径"       a.md   'in D:\Raw Footage\2024_proj.v2.'
+case_ block "登记的路径 会话写法"   "私人路径"       a.md   "D--Raw-Footage-2024-proj-v2"
+case_ block "登记的路径 URL 编码"   "私人路径"       a.md   "file:///D:/Raw%20Footage/2024_proj.v2/x"
+
+# ── 应拦：通用检查 ──
+case_ block "他人机器的主目录"      "真实用户名" a.md "$U/$other/Desktop"
+case_ block "同行有假名也有真名"    "真实用户名" a.md "$U/demo/x and $U/$other/y"
+case_ block "中文用户名"            "真实用户名" a.md "C:\\${U#/}\\张三\\Desktop"
+case_ block "Git Bash 写法"         "真实用户名" a.md "/c/Users/$other/y"
+case_ block "Windows 小写"          "真实用户名" a.md "c:\\users\\$other\\x"
+case_ block "Windows URL 编码"      "真实用户名" a.md "C%3A%5CUsers%5C$other%5Cx"
+case_ block "内嵌 base64 图片"      "base64"     a.html "<img src=\"$b64\">"
+case_ block "base64 在行内靠后"     "base64"     a.html "<img alt=\"a fairly long description of this picture here\" src=\"$b64\">"
+
+# ── 应拦：diff 解析与文件状态 ──
+case_ block "新增行以 ++ b/ 开头"   "真实用户名" a.md "++ b/x $U/$other/y"
+printf 'seed\nmore %s/%s/x\n' "$U" "$other" > seed.md; git add -A
+check block "修改已有文件时新增违规行" "seed.md:2:"
+rm link.md; printf '%s/%s/x\n' "$U" "$other" > link.md; git add -A
+check block "符号链接换成普通文件" "真实用户名"
+printf '*.lock -diff\n' > .gitattributes
+printf '%s/%s/x\n' "$U" "$other" > x.lock; git add -A
+check block "带 -diff 属性的文本" "真实用户名"
+printf 'ok\n%s/%s/x\n' "$U" "$other" > m.md; git add -A
+check block "新文件第二行的行号" "m.md:2:"
+printf 'ok\n' > 1.md; printf '%s/%s/x\n' "$U" "$other" > "2 two.md"; git add -A
+check block "多文件提交中带空格的文件名" "2 two.md:1:"
+
+# ── 应拦：命令失败不得放行 ──
+mkdir -p "$work/bin"
+printf '#!/bin/sh\nexit 2\n' > "$work/bin/grep"; chmod +x "$work/bin/grep"
+printf 'hello\n' > a.md; git add -A
+if PATH="$work/bin:$PATH" .githooks/pre-commit >/dev/null 2>&1; then bad "grep 失败时不应放行"; else ok; fi
+git reset -q --hard HEAD; git clean -qfdx
+
+# ── 应照常工作：Git for Windows 自带的 grep 3.0 在 LC_ALL=C 下 -i 和 -F 一起用会直接崩 ──
+real_grep=$(command -v grep)
+mkdir -p "$work/wingrep"
+cat > "$work/wingrep/grep" <<EOF
+#!/bin/sh
+# 模拟那个 grep：选项里同时有 -i 和 -F 就异常退出；-e、-f 后面跟的是模式，跳过
+i= F= skip=
+for a; do
+  if [ -n "\$skip" ]; then skip=; continue; fi
+  case \$a in
+    -e|-f) skip=1 ;;
+    --) break ;;
+    --ignore-case) i=1 ;;
+    --fixed-strings) F=1 ;;
+    --*) ;;
+    -*) case \$a in *i*) i=1 ;; esac; case \$a in *F*) F=1 ;; esac ;;
+  esac
+done
+[ "\$i\$F" = 11 ] && { echo "grep: abort" >&2; exit 134; }
+exec "$real_grep" "\$@"
+EOF
+chmod +x "$work/wingrep/grep"
+PATH="$work/wingrep:$PATH" case_ pass  "Windows 的 grep 下普通文本" ""         a.md "hello"
+PATH="$work/wingrep:$PATH" case_ block "Windows 的 grep 下的词条"   "私人词条" a.md "为某客户项目做的"
+
+# ── 应放行 ──
+case_ pass "普通文本"             "" a.md  "hello"
+case_ pass "白名单内的图片"       "" "assets/图标/a b.png" x
+mkdir -p assets; printf 'PK\003\004\000\000binary' > assets/pack.zip; git add -A
+check pass "白名单内的二进制文件" ""
+case_ pass "假用户名"             "" a.md  "$U/demo/project、C:\\Users\\Test\\x、$U/yourname."
+case_ pass "占位写法"             "" a.md  "~/project、%USERPROFILE%\\x、<素材目录>/a、$U/<name>/x"
+case_ pass "相似但不同的用户名"   "" a.md  "github.com/${me}cc 和 home-${me}cc"
+case_ pass "邮箱"                 "" a.md  "联系 selftest@example.com"
+case_ pass "网页路由"             "" a.ts  'href="/home/settings" fetch("/api/Users/42") class="home-page"'
+case_ pass "以 HOME 结尾的变量"   "" a.md  "Linux \$XDG_CONFIG_HOME/$me-desktop、macOS \$HOME/$me-desktop"
+case_ pass "词条不当正则用"       "" a.md  "Xazww"   # 词条不转义时，它的正则会命中这一行
+git mv seed.md renamed.md; check pass "纯重命名" ""
+
+# 把 HOME 设成 /home/<用户名> 模拟 Linux：按 HOME 的通用检查同样要放过变量；
+# 这时 Users 路径只能由按用户名的检查拦下，借此核对它仍认任意大小写
+lh=/home/$me
+HOME=$lh case_ pass  "Linux 下以 HOME 结尾的变量" ""               a.md "\$XDG_CONFIG_HOME/$me-desktop、\$HOME/$me-desktop"
+HOME=$lh case_ block "Linux 下的真实主目录"       "本机用户主目录" a.md "/home/$me/x"
+HOME=$lh case_ block "Users 小写"                 "本机用户主目录" a.md "see /users/$me/x"
+HOME=$lh case_ block "用户名大写"                 "本机用户主目录" a.md "C:\\USERS\\$ME\\x"
+
+# 历史遗留不拦：已在仓库里的违规行，不妨碍同一文件的无关改动
+printf '%s\n' "$U/$other/old" "line" > legacy.md
+git add legacy.md && git commit -qm legacy
+printf '%s\n' "$U/$other/old" "line changed" > legacy.md
+git add legacy.md
+check pass "历史遗留行不拦无关改动" ""
+
+# --all 查索引里的全部内容，且不受 color.ui 影响
+printf 'x' > shot.png; git add -f shot.png; git commit -qm media
+git config color.ui always
+out=$(.githooks/pre-commit --all 2>&1)
+git config --unset color.ui
+if printf '%s' "$out" | grep -qF "legacy.md:1:"; then ok; else bad "--all 应查出已跟踪的违规行"; fi
+if printf '%s' "$out" | grep -qF "shot.png"; then ok; else bad "--all 应查出白名单外的媒体"; fi
+
+# 工作树里提交时，主仓库所在目录同样要拦
+git worktree add -q ../wt -b wt
+cd ../wt || exit 1
+printf '%s\n' "main repo at $here" > b.md
+git add b.md
+if .githooks/pre-commit >/dev/null 2>&1; then bad "工作树里应拦主仓库目录"; else ok; fi
+git reset -q --hard HEAD
+printf '%s\n' "worktree at $(git rev-parse --show-toplevel)/src" > b.md
+git add b.md
+if .githooks/pre-commit >/dev/null 2>&1; then bad "工作树里应拦工作树自己的目录"; else ok; fi
+
+echo "通过 $pass，失败 $fail"
+[ $fail -eq 0 ]

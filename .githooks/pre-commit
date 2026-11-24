@@ -1,0 +1,249 @@
+#!/usr/bin/env bash
+# 私人内容门禁，规则见 rules/private-content.md。
+# 无参数：检查本次暂存的文件和新增的行（pre-commit 钩子）。
+# --all：检查索引里全部已跟踪文件（盘点与 CI）。
+# 本文件不写任何本机信息；本机值在运行时读取，私人路径和词条存在 .git/config。
+# 任何一步出错都按拦截处理。改动本文件后运行 .githooks/selftest。
+set -u
+export LC_ALL=C   # 按字节处理，避免非 UTF-8 内容让 grep 吞掉命中
+
+die() { echo "✗ 门禁自身出错，已按拦截处理：$*" >&2; exit 1; }
+warn() { echo "⚠ $*" >&2; }
+
+root=$(git rev-parse --show-toplevel) || die "不在 Git 仓库里"
+cd "$root" || die "进不了仓库目录"
+
+mode=staged
+[ "${1:-}" = "--all" ] && mode=all
+
+allowlist=.githooks/media-allowlist
+# 按扩展名认定的媒体、字幕和文档；此外凡是内容为二进制的文件同样受白名单限制
+media_re='\.(png|jpe?g|jfif|gif|webp|bmp|tiff?|heic|heif|avif|ico|psd|mp4|mov|m4v|mkv|avi|webm|flv|wmv|mp3|wav|m4a|aac|flac|ogg|opus|srt|ass|vtt|pdf|rtf|docx?|xlsx?|pptx?|pages|numbers|key)$'
+# 示例路径里允许出现的假用户名，如 /Users/demo；不分大小写
+fake_names='demo|me|test|tester|user|username|name|you|yourname|your-name|example|alice|bob|john|jane|foo|bar|xxx|admin|administrator|default|runner|shared|public'
+# 容器和 CI 里通用的用户名与检出目录，不算本机信息
+generic_users='root|runner|node|vscode|ubuntu|codespace|user|admin|administrator'
+generic_roots='^/(usr|workspaces?|app|src|code|builds?|github|__w|opt|srv|var|tmp)(/|$)'
+
+git_q() { git -c core.quotepath=false "$@"; }
+
+work=$(mktemp -d) || die "建不了临时目录"
+trap 'rm -rf "$work"' EXIT
+list=$work/list eol=$work/eol raw=$work/raw text=$work/text
+
+if [ "$mode" = all ]; then
+  git ls-files -z > "$list" || die "列不出已跟踪文件"
+else
+  git diff --cached --name-only --diff-filter=ACMRT -z > "$list" || die "列不出暂存文件"
+fi
+[ -s "$list" ] || exit 0
+
+files=()
+while IFS= read -r -d '' f; do files+=("$f"); done < "$list"
+
+failed=0
+
+# ── 一、媒体、字幕、文档和二进制文件只能放在白名单目录 ──
+patterns=()
+if [ -f "$allowlist" ]; then
+  while IFS= read -r line || [ -n "$line" ]; do
+    line=${line#$'\xef\xbb\xbf'}
+    line=${line%$'\r'}
+    line=${line%"${line##*[! ]}"}
+    line=${line#./}
+    line=${line#/}
+    case "$line" in ''|'#'*) continue ;; esac
+    patterns+=("$line")
+  done < "$allowlist"
+fi
+
+allowed() {
+  local p
+  for p in ${patterns[@]+"${patterns[@]}"}; do
+    # shellcheck disable=SC2254
+    case "$1" in $p*) return 0 ;; esac
+  done
+  return 1
+}
+
+is_media() {
+  local r
+  shopt -s nocasematch
+  [[ $1 =~ $media_re ]]
+  r=$?
+  shopt -u nocasematch
+  return $r
+}
+
+for f in "${files[@]}"; do
+  if is_media "$f" && ! allowed "$f"; then
+    echo "✗ 媒体或文档文件不在白名单目录：$f"
+    failed=1
+  fi
+done
+
+# 内容为二进制的文件（含压缩包、UTF-16 文本、未列出的媒体格式）
+if [ "$mode" = all ]; then
+  git ls-files --eol -z > "$eol" || die "读不出文件类型"
+else
+  xargs -0 git --literal-pathspecs ls-files --eol -z -- < "$list" > "$eol" || die "读不出文件类型"
+fi
+
+excludes=()
+while IFS= read -r -d '' rec; do
+  case "$rec" in i/-text*) ;; *) continue ;; esac
+  f=${rec#*$'\t'}
+  excludes+=(":(exclude,literal)$f")
+  if ! is_media "$f" && ! allowed "$f"; then
+    echo "✗ 二进制文件不在白名单目录：$f"
+    failed=1
+  fi
+done < "$eol"
+
+# ── 二、待查文本：文件名，加上本次新增的行（--all 时为全部行），每行形如 文件:行号:内容 ──
+# 二进制文件已由上一步处理，这里排除；其余一律按文本读，不受 -diff、binary 属性和 textconv 影响
+printf '(文件名) %s\n' "${files[@]}" > "$text" || die "写不了临时文件"
+if [ "$mode" = all ]; then
+  git_q grep --cached --no-color -a -n -e '' -- . ${excludes[@]+"${excludes[@]}"} > "$raw"
+  [ $? -le 1 ] || die "git grep 失败"
+  tr -d '\000' < "$raw" >> "$text" || die "处理文本失败"
+else
+  git_q diff --cached -U0 --no-color --no-ext-diff --no-textconv --text --diff-filter=ACMRT \
+    -- . ${excludes[@]+"${excludes[@]}"} > "$raw" || die "git diff 失败"
+  # 只有文件头里以 "+++ b/" 开头的行是文件名（带空格的文件名后面有一个制表符）；进入 @@ 之后以 + 开头的都是新增内容
+  tr -d '\000' < "$raw" | awk '
+    /^diff --git / { h = 0; next }
+    !h && index($0, "+++ b/") == 1 { f = substr($0, 7); sub(/\t$/, "", f); next }
+    /^@@ / { h = 1; split($3, a, ","); n = substr(a[1], 2) + 0; next }
+    h && /^\+/ { print f ":" n ":" substr($0, 2); n++ }
+  ' >> "$text"
+  [ "${PIPESTATUS[0]}${PIPESTATUS[1]}" = 00 ] || die "解析 diff 失败"
+fi
+
+show() { # 从标准输入读命中行并报告
+  echo "✗ $1："
+  head -20 | cut -c1-200 | sed 's/^/    /'
+  failed=1
+}
+
+report() { # $1 = 说明，其余为 grep 参数
+  local label=$1 hits rc
+  shift
+  hits=$(grep -a "$@" "$text")
+  rc=$?
+  [ $rc -le 1 ] || die "grep 失败"
+  [ -n "$hits" ] && show "$label" <<< "$hits"
+}
+
+# 路径分隔的各种写法：/ \ \\、URL 编码、AI 会话目录名里的 -（如 D--Projects-repo）
+SLASH='([/\\]+|%5[Cc]|%2[Ff])'
+SEP="(:|%3[Aa])?(${SLASH}|-+)"
+# 前面紧挨着字母数字、.、_、$ 时是文件名或变量名的一部分，不是路径起点。
+# 不排除 $ 的话，主目录为 /home/<用户名> 时，不分大小写的匹配会把 $HOME/<用户名>-app 当成主目录
+LB='(^|[^A-Za-z0-9._$]|%5[Cc]|%2[Ff])'
+END='([^A-Za-z0-9_]|$)'
+# 目录名里的空格、点、中文等，在 URL 编码和会话目录名里会变成别的字符，一律放宽匹配
+ANY='([^A-Za-z0-9/\\]|%[0-9A-Fa-f][0-9A-Fa-f])+'
+
+seg_regex() { # $2 为 nocase 时字母写成 [aA]，供不加 -i、需要部分区分大小写的正则使用
+  local s
+  s=$(printf '%s' "$1" | tr -cs 'A-Za-z0-9' '\001') || die "处理路径失败"
+  # 要在插入 ANY 之前转换：ANY 自带的字母区间不能改
+  if [ "${2:-}" = nocase ]; then
+    s=$(printf '%s' "$s" | awk '{
+      for (i = 1; i <= length($0); i++) {
+        c = substr($0, i, 1)
+        printf "%s", (c ~ /[A-Za-z]/ ? "[" tolower(c) toupper(c) "]" : c)
+      }
+    }') || die "处理路径失败"
+  fi
+  printf '%s' "${s//$'\001'/$ANY}"
+}
+
+path_regex() { # 把一个目录转成能认出上述各种写法的正则；不足两级的目录太宽，返回空
+  local p=${1//\\//} out='' count=0 seg segs
+  IFS=/ read -r -a segs <<< "$p"
+  for seg in ${segs[@]+"${segs[@]}"}; do
+    seg=${seg%:}
+    [ -z "$seg" ] && continue
+    out+="${out:+$SEP}$(seg_regex "$seg")"
+    count=$((count + 1))
+  done
+  [ $count -ge 2 ] && printf '%s%s%s' "$LB" "$out" "$END"
+}
+
+# 本机用户的主目录
+user=$(id -un 2>/dev/null || true)
+[ -z "$user" ] && user=${USER:-${USERNAME:-}}
+if [ ${#user} -lt 2 ]; then
+  warn "取不到本机用户名，跳过按用户名的主目录检查"
+elif ! printf '%s' "$user" | grep -qixE "$generic_users"; then
+  # 不加 -i：Users 和用户名认任意大小写，macOS、Windows 的路径不区分大小写；home 只认小写，
+  # 它是 Linux 等区分大小写系统上的主目录，真实路径只有小写一种写法，
+  # 不分大小写会把 $HOME、$XDG_CONFIG_HOME、$env:HOME 结尾的 HOME 当成路径
+  u=$(seg_regex "$user" nocase)
+  h='([Uu][Ss][Ee][Rr][Ss]|home)'
+  report "出现本机用户主目录" -E \
+    -e "(^|[^A-Za-z0-9]|%5[Cc]|%2[Ff])${h}${SLASH}${u}${END}" \
+    -e "-${h}-+${u}${END}"
+fi
+for d in "${HOME:-}" "${USERPROFILE:-}"; do
+  [ -z "$d" ] && continue
+  printf '%s' "$d" | grep -qE "$generic_roots|^/(home|Users)/($generic_users)\$|^/root\$" && continue
+  r=$(path_regex "$d")
+  [ -n "$r" ] && report "出现本机用户主目录" -iE -e "$r"
+done
+
+# 仓库所在目录：当前工作树，以及工作树所属的主仓库
+main_root=$(cd "$(git rev-parse --git-common-dir)/.." 2>/dev/null && pwd)
+for d in "$root" "$main_root"; do
+  [ -z "$d" ] && continue
+  printf '%s' "$d" | grep -qE "$generic_roots" && continue
+  r=$(path_regex "$d")
+  [ -n "$r" ] && report "出现仓库所在目录" -iE -e "$r"
+done
+
+# 本机登记的私人路径和词条
+while IFS= read -r -d '' d; do
+  [ -z "$d" ] && continue
+  r=$(path_regex "$d")
+  if [ -n "$r" ]; then
+    report "出现登记的私人路径" -iE -e "$r"
+  else
+    warn "登记的私人路径不足两级，未生效（privatecheck.path 第 1 级太宽，请登记更具体的目录）"
+  fi
+done < <(git config -z --get-all privatecheck.path)
+
+# 不用 grep -iF：Git for Windows 自带的 grep 3.0 在 LC_ALL=C 下 -i 和 -F 一起用会直接崩（abort），
+# 门禁就把所有提交都拦下。转义成正则再用 -iE，同样是按原文、不分大小写匹配
+while IFS= read -r -d '' t; do
+  [ -z "$t" ] && continue
+  e=$(printf '%s' "$t" | sed 's/[][\\.*^$+?(){}|]/\\&/g') || die "处理词条失败"
+  report "出现登记的私人词条" -iE -e "$e"
+done < <(git config -z --get-all privatecheck.term)
+
+# ── 三、不依赖本机信息的通用检查，CI 上同样生效 ──
+# 任何真实用户名的 /Users/ 路径（macOS 与 Windows）。逐个取出路径核对假名表，同一行里有假名不会放过真名
+NAME='[^]/\\[:space:]"'"'"'<>$%{}*:|?,;()=&#~`.[-][^]/\\[:space:]"'"'"'<>%{}*:|?,;()=&#`[]*'
+grep -a -n -oE \
+  -e "(^|[^A-Za-z0-9_.~-])(/[A-Za-z]|/mnt/[A-Za-z])?[/\\\\]+Users[/\\\\]+${NAME}" \
+  -e "[A-Za-z](:|%3[Aa])${SLASH}[Uu][Ss][Ee][Rr][Ss]${SLASH}${NAME}" \
+  "$text" > "$work/users"
+[ $? -le 1 ] || die "grep 失败"
+grep -a -viE -e "users${SLASH}(${fake_names})([^A-Za-z0-9_.-].*)?[.]?\$" "$work/users" > "$work/real"
+[ $? -le 1 ] || die "grep 失败"
+if [ -s "$work/real" ]; then
+  cut -d: -f1 "$work/real" | sort -un > "$work/nums" || die "处理命中行失败"
+  awk 'NR == FNR { want[$1]; next } FNR in want' "$work/nums" "$text" > "$work/hits" || die "处理命中行失败"
+  show "出现真实用户名的主目录路径（示例请用 demo、test 等假名或 ~ 占位；确属网页路由等误报时告知用户）" < "$work/hits"
+fi
+
+report "出现内嵌的 base64 媒体（请改为白名单目录里的文件）" -E \
+  -e 'data:(image|video|audio)/[^;,[:space:]]+(;[^;,[:space:]]+)*;base64,'
+
+if [ $failed -ne 0 ]; then
+  echo
+  echo "已拦截。处理方式见 rules/private-content.md；不得用 --no-verify 或 git add -f 绕过。"
+  exit 1
+fi
+exit 0

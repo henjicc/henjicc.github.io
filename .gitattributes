@@ -1,0 +1,2 @@
+# 钩子脚本固定用 LF；Windows 检出成 CRLF 会让钩子无法运行
+.githooks/* text eol=lf

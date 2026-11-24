@@ -1,6 +1,16 @@
 /* Tailwind 入口：把雾林令牌映射成工具类，外加少量组件共用的样式和动效。数值只来自 tokens.css。 */
 @import "tailwindcss" source("../");
 @import "./tokens.css";
+/*
+ * MiSans 自托管（npm 包 misans：按小米官方切片范围拆成带 unicode-range 的 woff2，浏览器只下载页面上出现的字所在的分片）。
+ * 只引设计用到的字重：400 正文、500 ui、600 Demibold、700 Bold；800（hero、display）没有对应文件，
+ * 按 CSS 字重匹配规则落到 900 Heavy。字体许可要求注明使用了 MiSans，页脚已写。
+ */
+@import "misans/lib/Normal/MiSans-Regular.min.css";
+@import "misans/lib/Normal/MiSans-Medium.min.css";
+@import "misans/lib/Normal/MiSans-Demibold.min.css";
+@import "misans/lib/Normal/MiSans-Bold.min.css";
+@import "misans/lib/Normal/MiSans-Heavy.min.css";
 
 /* 去掉 Tailwind 自带、雾林里没有的刻度，业务代码只能用雾林的颜色、字号和阴影。 */
 @theme {

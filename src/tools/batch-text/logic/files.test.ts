@@ -1,6 +1,6 @@
 import { unzipSync, strFromU8 } from "fflate";
 import { describe, expect, it } from "vitest";
-import { formatFileSize, isAcceptedTextFile, resultFileName, uniqueNames } from "./files";
+import { formatFileSize, isAcceptedTextFile, previewText, resultFileName, uniqueNames } from "./files";
 import { buildZip } from "./zip";
 
 describe("文件", () => {
@@ -19,6 +19,17 @@ describe("文件", () => {
 
   it("重名依次编号", () => {
     expect(uniqueNames(["a.txt", "a.txt", "b", "a.txt", "b"])).toEqual(["a.txt", "a (2).txt", "b", "a (3).txt", "b (2)"]);
+  });
+
+  it("只差大小写也算重名（Windows 和 macOS 解压时会互相覆盖）", () => {
+    expect(uniqueNames(["A.txt", "a.txt", "a (2).TXT", "A.TXT"])).toEqual(["A.txt", "a (2).txt", "a (2) (2).TXT", "A (3).TXT"]);
+  });
+
+  it("预览只看开头一段，合并空白", () => {
+    expect(previewText("  一\n\n二\t三  ", 10)).toBe("一 二 三");
+    expect(previewText("字".repeat(50), 10)).toBe(`${"字".repeat(10)}…`);
+    // 开头全是空白的大文件：截下的一段合并完不到上限，也要标出后面还有
+    expect(previewText(`${" ".repeat(100)}尾`, 10)).toBe("…");
   });
 
   it("大小", () => {

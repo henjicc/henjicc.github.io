@@ -72,7 +72,7 @@ export function LibraryDialog<T extends Entry>(p: LibraryDialogProps<T>) {
                       <span className="truncate">{entry.name}</span>
                       {active ? <Tag tone="sky">正在用</Tag> : null}
                     </span>
-                    <span className="truncate text-caption text-ink-muted">{p.describe(entry)}</span>
+                    <span className="grid text-caption text-ink-muted [overflow-wrap:anywhere]">{p.describe(entry)}</span>
                   </button>
                   <IconButton icon={Pencil} label={`编辑 ${entry.name}`} size="sm" onClick={() => p.onEdit(entry)} />
                   {p.canDelete(entry) ? (

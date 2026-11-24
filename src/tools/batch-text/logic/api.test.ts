@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ApiError, checkBaseUrl, describeError, normalizeBaseUrl, requestChat, testConnection } from "./api";
+import { ApiError, checkBaseUrl, describeError, isValidApiKey, normalizeBaseUrl, redactKey, requestChat, testConnection, TimeoutError } from "./api";
 
 const config = { baseUrl: "https://llm.example.test/v1/", model: " demo-model " };
 
@@ -8,7 +8,7 @@ function json(body: unknown, status = 200) {
 }
 
 describe("checkBaseUrl", () => {
-  const https = "https://www.example.com";
+  const https = true;
   it("HTTPS 页面上拦下 HTTP 地址", () => {
     expect(checkBaseUrl("http://192.168.1.20:8000/v1", https)).toBe("insecure");
     expect(checkBaseUrl("http://llm.example.test/v1", https)).toBe("insecure");
@@ -18,7 +18,10 @@ describe("checkBaseUrl", () => {
     expect(checkBaseUrl("http://localhost:11434/v1", https)).toBeNull();
     expect(checkBaseUrl("http://127.0.0.1:11434/v1", https)).toBeNull();
     expect(checkBaseUrl("http://[::1]:11434/v1", https)).toBeNull();
-    expect(checkBaseUrl("http://192.168.1.20:8000/v1", "http://localhost:4173")).toBeNull();
+    expect(checkBaseUrl("http://127.8.9.10:11434/v1", https)).toBeNull();
+    expect(checkBaseUrl("http://127.1:11434/v1", https)).toBeNull();
+    expect(checkBaseUrl("http://models.localhost/v1", https)).toBeNull();
+    expect(checkBaseUrl("http://192.168.1.20:8000/v1", false)).toBeNull();
     expect(checkBaseUrl("https://llm.example.test/v1", https)).toBeNull();
   });
 
@@ -27,17 +30,22 @@ describe("checkBaseUrl", () => {
     expect(checkBaseUrl("llm.example.test/v1", https)).toBe("invalid");
     expect(checkBaseUrl("ftp://llm.example.test", https)).toBe("invalid");
   });
+
+  it("看起来像回环地址的公网域名照样拦", () => {
+    expect(checkBaseUrl("http://127.0.0.1.example.test/v1", https)).toBe("insecure");
+    expect(checkBaseUrl("http://localhost.example.test/v1", https)).toBe("insecure");
+  });
 });
 
 describe("requestChat", () => {
   it("POST 到 /chat/completions，带上密钥、模型和 signal，取第一条回复", async () => {
     const fetchFn = vi.fn<typeof fetch>(async () => json({ choices: [{ message: { content: "改好了" } }] }));
     const signal = new AbortController().signal;
-    const out = await requestChat(fetchFn, config, "sk-fictional", [{ role: "user", content: "hi" }], signal);
+    const out = await requestChat(fetchFn, config, "sk-fictional", [{ role: "user", content: "hi" }], { signal });
     expect(out).toBe("改好了");
     const [url, init] = fetchFn.mock.calls[0]!;
     expect(url).toBe("https://llm.example.test/v1/chat/completions");
-    expect(init?.signal).toBe(signal);
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer sk-fictional");
     expect(JSON.parse(init?.body as string)).toMatchObject({ model: "demo-model", temperature: 0.7, max_tokens: 4000 });
   });
@@ -62,9 +70,21 @@ describe("requestChat", () => {
           init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
         }),
     );
-    const pending = requestChat(fetchFn, config, "k", [], controller.signal);
+    const pending = requestChat(fetchFn, config, "k", [], { signal: controller.signal });
     controller.abort();
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+  });
+
+  it("接口一直不回时到点放弃，给出超时原因", async () => {
+    const fetchFn = vi.fn<typeof fetch>(
+      (_url, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+        }),
+    );
+    const err = await requestChat(fetchFn, config, "k", [], { signal: new AbortController().signal, timeoutMs: 20 }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(TimeoutError);
+    expect(describeError(err)).toContain("没有回复");
   });
 });
 
@@ -82,6 +102,20 @@ describe("describeError", () => {
   it("网络或跨域失败给出可能的原因", () => {
     expect(describeError(new TypeError("Failed to fetch"))).toContain("不允许从浏览器直接访问");
   });
+
+  it("接口把密钥写进报错时遮住", () => {
+    const err = new ApiError(401, "Incorrect API key provided: sk-fictional-abc123");
+    expect(describeError(err, " sk-fictional-abc123 ")).toBe("接口返回 401，密钥不对或没有权限：Incorrect API key provided: ***");
+    expect(redactKey("无关的文字", "")).toBe("无关的文字");
+  });
+});
+
+it("密钥只能是可见的 ASCII 字符", () => {
+  expect(isValidApiKey("sk-fictional_AZ.09")).toBe(true);
+  expect(isValidApiKey("sk-fictional 123")).toBe(false);
+  expect(isValidApiKey("sk-假的")).toBe(false);
+  expect(isValidApiKey("sk-ｆｕｌｌ")).toBe(false);
+  expect(isValidApiKey("")).toBe(false);
 });
 
 it("normalizeBaseUrl 去掉空白和末尾斜杠", () => {

@@ -2,6 +2,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 // 只在预览里按需加载。不接 rehype-raw：模型输出里的 HTML 按原文显示，不当成页面元素执行。
+// 图片一律不加载：模型输出或文件里的 ![](https://…) 一显示就会向那个地址发请求，地址里可以带上文件内容，等于把内容送出去。
 const prose = [
   "grid gap-3 text-body text-ink [overflow-wrap:anywhere]",
   "[&_h1]:m-0 [&_h1]:text-title-2 [&_h2]:m-0 [&_h2]:text-title-3 [&_h3]:m-0 [&_h3]:text-body-lg [&_h3]:font-semibold",
@@ -20,11 +21,16 @@ export default function Markdown({ text }: { text: string }) {
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          a: ({ href, children }) => (
-            <a href={href} target="_blank" rel="noreferrer">
-              {children}
-            </a>
-          ),
+          // 不安全的链接（javascript: 等）被 react-markdown 清成空字符串；空 href 加 target=_blank 会新开一个当前页，按普通文字显示
+          a: ({ href, children }) =>
+            href ? (
+              <a href={href} target="_blank" rel="noreferrer">
+                {children}
+              </a>
+            ) : (
+              <span>{children}</span>
+            ),
+          img: ({ alt }) => <span className="text-ink-muted">[图片{alt ? `：${alt}` : ""}]</span>,
         }}
       >
         {text}

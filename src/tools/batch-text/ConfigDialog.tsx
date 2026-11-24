@@ -6,7 +6,7 @@ import { TextField } from "~/ui/text-field";
 import { checkBaseUrl, ENDPOINT_MESSAGES, normalizeBaseUrl, type ApiConfig } from "./logic/api";
 import { exportConfigFile, parseConfigFile } from "./logic/transfer";
 import { EditorForm, LibraryDialog } from "./LibraryDialog";
-import { pageOrigin, reportSave } from "./platform-io";
+import { reportSave, secureContext } from "./platform-io";
 import { DEFAULT_CONFIG, newId, useKeys, useLibrary, useSettings } from "./store";
 
 type Draft = Omit<ApiConfig, "id"> & { id: string | null };
@@ -26,7 +26,7 @@ export function ConfigDialog({ open, onOpenChange }: { open: boolean; onOpenChan
   function save() {
     if (!draft) return;
     const baseUrl = normalizeBaseUrl(draft.baseUrl);
-    const problem = checkBaseUrl(baseUrl, pageOrigin());
+    const problem = checkBaseUrl(baseUrl, secureContext());
     const found = {
       name: draft.name.trim() ? undefined : "起个名字",
       baseUrl: problem ? ENDPOINT_MESSAGES[problem] : undefined,
@@ -116,7 +116,13 @@ export function ConfigDialog({ open, onOpenChange }: { open: boolean; onOpenChan
       entries={configs}
       activeId={activeId}
       onSelect={(id) => useSettings.setState({ activeConfigId: id })}
-      describe={(c) => `${c.baseUrl} · ${c.model}`}
+      describe={(c) => (
+        // 手机上一行放不下：地址和模型分两行，允许折行，模型名不被截断
+        <>
+          <span>{c.baseUrl}</span>
+          <span>{c.model || "还没填模型"}</span>
+        </>
+      )}
       onEdit={(c) => edit({ ...c })}
       onDelete={remove}
       canDelete={(c) => configs.length > 1 && c.id !== DEFAULT_CONFIG.id}
@@ -133,7 +139,14 @@ export function ConfigDialog({ open, onOpenChange }: { open: boolean; onOpenChan
               onChange={(v) => setDraft({ ...draft, baseUrl: v })}
               error={errors.baseUrl}
             />
-            <TextField label="模型" spellCheck={false} value={draft.model} onChange={(v) => setDraft({ ...draft, model: v })} error={errors.model} />
+            <TextField
+              label="模型"
+              spellCheck={false}
+              placeholder="例如 deepseek-chat"
+              value={draft.model}
+              onChange={(v) => setDraft({ ...draft, model: v })}
+              error={errors.model}
+            />
           </EditorForm>
         ) : null
       }

@@ -103,6 +103,19 @@ test("从工具箱打开随机抽取，抽一次", async ({ page }) => {
 
 test.describe(() => {
   test.use({ allowDocument404: true });
+  // Pages 对 /tools/ 下更深的地址也返回 tools/404.html（由工具路由预渲染），浏览器里要匹配到同一条路由，
+  // 否则水合失败、整页渲染两遍。/tools/nope/ 见 cutover.web.spec.ts
+  for (const path of ["/tools/x/y/", "/tools/random-picker/old.html"]) {
+    test(`${path} 显示 404 页，只渲染一遍`, async ({ page }) => {
+      const response = await page.goto(path);
+      expect(response?.status()).toBe(404);
+      await expect(page.getByRole("heading", { name: "这里起雾了" })).toBeVisible();
+      await page.waitForLoadState("networkidle");
+      await expect(page.locator("h1")).toHaveCount(1);
+      await expect(page.locator("main")).toHaveCount(1);
+    });
+  }
+
   test("找不到的地址显示 404 页", async ({ page }) => {
     const response = await page.goto("/no-such-page/");
     expect(response?.status()).toBe(404);

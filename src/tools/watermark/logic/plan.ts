@@ -83,17 +83,22 @@ export function singleCenter(canvasW: number, canvasH: number, boxW: number, box
 
 /**
  * 平铺：每格是水印框加上间隔，位移按图片尺寸的百分比平移整张网格。
+ * 两个方向的间隔都按水印较长的一边算：文字水印又宽又扁，按各自的边算的话行距会挤成一条条斜线。
  * 位移先对格子取模，网格平移多远都铺满整张图；四边各多铺两格，转过的水印也盖得到角落。
  */
 export function tileCenters(canvasW: number, canvasH: number, boxW: number, boxH: number, spacingX: number, spacingY: number, offsetX: number, offsetY: number) {
-  const cellW = Math.max(1, boxW * (1 + spacingX / 100));
-  const cellH = Math.max(1, boxH * (1 + spacingY / 100));
+  const unit = Math.max(boxW, boxH) / 100;
+  const cellW = Math.max(1, boxW + spacingX * unit);
+  const cellH = Math.max(1, boxH + spacingY * unit);
   const mod = (v: number, m: number) => ((v % m) + m) % m;
   const startX = mod((offsetX / 100) * canvasW, cellW) - 2 * cellW;
   const startY = mod((-offsetY / 100) * canvasH, cellH) - 2 * cellH;
   const centers: { x: number; y: number }[] = [];
-  for (let y = startY; y < canvasH + 2 * cellH; y += cellH) {
-    for (let x = startX; x < canvasW + 2 * cellW; x += cellW) centers.push({ x, y });
+  let row = 0;
+  for (let y = startY; y < canvasH + 2 * cellH; y += cellH, row++) {
+    // 隔行错开半格（砖块式），斜着放时不会排成一条条竖线
+    const shift = row % 2 ? cellW / 2 : 0;
+    for (let x = startX + shift; x < canvasW + 2 * cellW; x += cellW) centers.push({ x, y });
   }
   return centers;
 }

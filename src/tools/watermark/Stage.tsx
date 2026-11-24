@@ -55,7 +55,7 @@ function useBoxSize() {
 }
 
 /** 预览：画布按舞台大小和屏幕像素比开，用和导出同一个绘制方案、按比例缩小着画。 */
-function Preview({ item, settings, unit, mark }: { item: ImageItem | null; settings: MarkSettings; unit: SizeUnit; mark: Mark | undefined }) {
+function Preview({ item, settings, unit, mark, sampleTag }: { item: ImageItem | null; settings: MarkSettings; unit: SizeUnit; mark: Mark | undefined; sampleTag: boolean }) {
   const [box, boxSize] = useBoxSize();
   const canvas = useRef<HTMLCanvasElement>(null);
   const sample = useMemo(() => (typeof document === "undefined" ? null : drawSample()), []);
@@ -112,13 +112,10 @@ function Preview({ item, settings, unit, mark }: { item: ImageItem | null; setti
 
   return (
     <div ref={box} className="relative grid min-h-0 min-w-0 flex-1 place-items-center">
-      <canvas
-        ref={canvas}
-        role="img"
-        aria-label={item ? `预览：${item.name}` : "预览：示例图"}
-        style={{ width: cssW || undefined, height: cssH || undefined }}
-        className={cn("block rounded-xs shadow-float", !image && "invisible")}
-      />
+      <div className={cn("relative", !image && "invisible")} style={{ width: cssW || undefined, height: cssH || undefined }}>
+        <canvas ref={canvas} role="img" aria-label={item ? `预览：${item.name}` : "预览：示例图"} className="block size-full rounded-xs shadow-float" />
+        {sampleTag && !item ? <Tag className="absolute top-2 left-2">示例图</Tag> : null}
+      </div>
     </div>
   );
 }
@@ -207,12 +204,12 @@ function Thumbs() {
           </Button>
         ) : null}
         <Button size="sm" variant="ghost" onClick={resetToDefaults}>
-          {count ? `恢复默认（${count} 张）` : "恢复默认"}
+          恢复默认
         </Button>
         <Button size="sm" variant="ghost" onClick={() => removeImages(targets().map((im) => im.id))}>
-          {count ? `移除 ${count} 张` : "移除"}
+          移除
         </Button>
-        {count ? <span className="ml-auto px-2 font-num text-timecode text-ink-muted tabular-nums">已选 {count} 张</span> : null}
+        {count && !mobile ? <span className="ml-auto px-2 font-num text-timecode text-ink-muted tabular-nums">已选 {count} 张</span> : null}
       </div>
     </div>
   );
@@ -223,10 +220,8 @@ export function Stage({ item, settings, unit, mark }: { item: ImageItem | null; 
   const hasImages = useSession((s) => s.images.length > 0);
   return (
     <div className="relative flex size-full min-h-0 flex-col gap-4">
-      {mobile && !item ? (
-        <Tag className="absolute top-0 left-0 z-1">示例图</Tag>
-      ) : null}
-      <Preview item={item} settings={settings} unit={unit} mark={mark} />
+      {/* 桌面的操作栏里已经标了“示例图”，手机没有操作栏，标在图上 */}
+      <Preview item={item} settings={settings} unit={unit} mark={mark} sampleTag={mobile} />
       {hasImages ? <Thumbs /> : null}
     </div>
   );

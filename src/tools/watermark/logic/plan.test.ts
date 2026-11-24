@@ -49,10 +49,18 @@ describe("平铺", () => {
     expect(Math.min(...ys)).toBeLessThan(0);
     expect(Math.max(...ys)).toBeGreaterThan(500);
   });
-  it("间隔按水印尺寸的百分比：100% 时格子是水印的两倍", () => {
+  it("间隔按水印较长边的百分比：100% 时横向格子是水印的两倍，纵向也加同样的间隔", () => {
     const centers = tileCenters(1000, 500, 100, 50, 100, 100, 0, 0);
     const row = centers.filter((c) => c.y === centers[0]!.y).map((c) => c.x);
     expect(row[1]! - row[0]!).toBe(200);
+    const ys = [...new Set(centers.map((c) => c.y))];
+    expect(ys[1]! - ys[0]!).toBe(150);
+  });
+  it("隔行错开半格", () => {
+    const centers = tileCenters(1000, 500, 100, 50, 100, 100, 0, 0);
+    const ys = [...new Set(centers.map((c) => c.y))];
+    const firstX = (y: number) => centers.find((c) => c.y === y)!.x;
+    expect(firstX(ys[1]!) - firstX(ys[0]!)).toBe(100);
   });
   it("位移再大也不会留出空白", () => {
     for (const offset of [-100, -37, 0, 55, 100]) {

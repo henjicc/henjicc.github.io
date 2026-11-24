@@ -50,7 +50,7 @@ export const SIZE_RANGE: Record<SizeUnit, { min: number; max: number }> = {
 };
 export const OPACITY_RANGE = { min: 0.1, max: 1 };
 export const OFFSET_RANGE = { min: -100, max: 100 };
-/** 平铺间隔按水印自身宽高的百分比算：同一套设置在大小不同的照片上疏密一样。 */
+/** 平铺间隔按水印自身尺寸的百分比算：同一套设置在大小不同的照片上疏密一样。 */
 export const SPACING_RANGE = { min: 0, max: 300 };
 export const ROTATION_RANGE = { min: -180, max: 180 };
 /** 选“平铺”时自动设成的角度。 */
@@ -70,8 +70,8 @@ export const FACTORY_MARK = {
   position: "center" as Position,
   offsetX: 0,
   offsetY: 0,
-  spacingX: 60,
-  spacingY: 60,
+  spacingX: 50,
+  spacingY: 50,
   size: 10,
   rotation: 0,
   opacity: 0.7,

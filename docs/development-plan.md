@@ -1,6 +1,6 @@
 # henjihenji.com 重构开发方案
 
-> 状态：已定方案，尚未开工。
+> 状态：已定方案，第 0 阶段进行中（本地部分已完成，见第 9 节）。
 > 视觉与交互以「雾林设计系统」和「雾林全站原型」为准，入口见 [`rules/project-context.md`](../rules/project-context.md)。本文只写怎么做。
 
 ## 1. 这是什么
@@ -18,12 +18,12 @@ TOY 上不放完整主页：访客本来就在你的 B 站频道里，视频列�
 
 ## 2. 技术栈
 
-每个职责只用一个库。版本以锁文件为准，开工时核对一次最新稳定版。
+每个职责只用一个库。版本以锁文件为准；2026-11 核对的最新稳定版是 React 19.3、React Router 8.5、Vite 8.3。
 
 | 职责 | 选用 | 说明 |
 |---|---|---|
 | 界面 | React + TypeScript | 生态最全：下面几项都是 React 原生的 |
-| 路由与构建 | React Router 7（框架模式）+ Vite | 网站：`ssr: false` + `prerender: true`，每个页面构建时输出静态 HTML，不需要服务器。TOY：同一批页面组件，用内存路由打成单个 `index.html` |
+| 路由与构建 | React Router 8 + Vite | 网站：框架模式 `ssr: false` + `prerender: true`，每个页面构建时输出静态 HTML，不需要服务器。TOY：同一批页面组件，用哈希路由打成单个 `index.html` |
 | 样式 | Tailwind CSS v4 | 用 `@theme` 映射雾林令牌 |
 | 基础组件 | shadcn/ui | 源码进项目，按雾林样式改；命令面板用它的 Command（cmdk），轻提示用 Sonner |
 | 图标 | Lucide | |
@@ -33,38 +33,48 @@ TOY 上不放完整主页：访客本来就在你的 B 站频道里，视频列�
 | 字体 | MiSans 网页字体（按字切片、自托管） | 页脚注明“字体：MiSans”，这是许可要求 |
 | 测试 | Vitest + Playwright | 纯逻辑用 Vitest；两个发布目标各跑一遍 Playwright 冒烟 |
 | 代码检查 | TypeScript 严格模式 + ESLint | ESLint 禁止页面和工具直接用 `window.open`、`localStorage`、`location`，必须走平台适配层 |
+| TOY 发布 | B 站官方 Toy CLI（`toy`） | 创建、更新、查询、统计、绑定视频都用它；类型声明用官方的 `toy.d.ts` |
 
 为什么不用 Astro：这个站的主体是工具和贯穿全站的交互（Ctrl K、主题、轻提示、常驻顶栏、共享元素过渡），整站一个 React 应用最顺。TOY 只接受单个 `index.html` 加页面内跳转，多页面架构在 TOY 上反而难做。
 
 ## 3. 两个发布目标的差异
 
+依据：B 站 TOY 官方使用手册、常见问题、JS SDK 和 CLI 文档（2026-11-24 读取）。
+
 | | 网站 | TOY |
 |---|---|---|
-| 路由 | 浏览器地址（`/tools/watermark/`），每页预渲染 | 内存路由：不改地址栏，不用 `#`，不用 `pushState` |
+| 路由 | 浏览器地址（`/tools/watermark/`），每页预渲染 | 哈希路由（`index.html#/tools/watermark`），官方推荐：刷新不 404，后退可用 |
+| 深链 | 直接用地址 | 分享和二维码只能带 query，所以用 `index.html?p=/tools/watermark`，启动时转成哈希路由 |
 | 资源路径 | 根路径 `/` | 相对路径（Vite `base: "./"`），页面跑在 `/toy/<路径>/` 下 |
-| 外部链接 | 普通 `<a target="_blank">` | 平台会改写直接写的外部链接，统一用脚本打开 |
-| 保存文件 | 浏览器下载 | 用 SDK 存到相册；没有 SDK 时显示图片，长按保存 |
-| 设置记忆 | localStorage（按工具加前缀） | SDK 云存档；拿不到时只存在内存里 |
-| 返回 | 浏览器后退 | 页面内顶栏的返回按钮（App 的返回键行为待验证） |
-| 数据 | 构建时拉取的视频数据 | 打进包里的快照；TOY 版基本用不到视频数据 |
-| 更新 | 推送 `main` 自动部署 | 每次都要构建、预览、你确认，再提交审核 |
-| 体积 | 不紧张 | ZIP 建议在 20MB 以内，字体切片要算进去 |
+| B 站内跳转 | 普通链接 | SDK `toy.navigate({ type, id })`，在 App 里原生打开视频、空间、动态（需要用户点击触发） |
+| 其他外链 | 普通链接 | 统一由平台适配层打开（实际表现待第 0 阶段在 App 里测） |
+| 保存图片 | 浏览器下载 | SDK `saveImageToAlbum`（只在 App 里有；base64 上限 5MB，建议 2MB 内，所以先压成 JPEG）；没有时显示图片让用户长按保存 |
+| 分享 | 复制链接 | SDK `share`（分享当前 TOY 内的页面）、`sharePicture`（分享图片本身，≤2MB）、`getQrCode` |
+| 设置记忆 | localStorage（按工具加前缀） | SDK 云存储：按“用户 + 本 TOY”隔离，最多 128 个键，每个值 ≤1KB，有频率限制，只在停止编辑后或页面隐藏时写 |
+| 返回 | 浏览器后退 | 哈希路由自带后退；顶栏另有返回按钮，没有上一页时回到工具列表 |
+| 全屏 | 浏览器全屏 | SDK `setContainerMode({ immersive })`；安全区和可用尺寸用 `getContainerState` / `onContainerChange` |
+| 主页数据 | 构建时拉取的视频数据 | 用不到；如需作者资料、关注状态，SDK 有 `getAuthorProfile`、`getAuthorRelation` |
+| 更新 | 推送 `main` 自动部署 | 每次都要构建、检查、预览、你确认，再提交审核 |
+| 包体 | 不紧张 | 当前账号上限 140MB（以发布页显示为准）；只发布白名单后缀，`.avif`、`.txt`、`.webmanifest`、`.map` 等会被过滤 |
 
 这些差异全部收进一个**平台适配层**（`src/platform/`）。页面和工具只调用它，不判断自己在哪个平台：
 
 ```ts
 export interface Platform {
   kind: "web" | "toy";
+  openBili(type: "video" | "space" | "opus", id: string): Promise<void>;
   openExternal(url: string): void;
-  saveImage(blob: Blob, filename: string): Promise<"saved" | "shown">;
-  storage: {                        // 按工具分命名空间，值都是 JSON
+  saveImage(canvas: HTMLCanvasElement, filename: string): Promise<"saved" | "downloaded" | "shown">;
+  shareImage?(canvas: HTMLCanvasElement): Promise<void>;
+  storage: {                        // 按工具分命名空间，值都是 JSON；TOY 上单个值不超过 1KB
     get<T>(key: string): Promise<T | undefined>;
     set<T>(key: string, value: T): Promise<void>;
   };
-  share?(payload: { title: string; image?: Blob; url?: string }): Promise<void>;
-  viewer?(): Promise<{ following: boolean } | null>;   // 只在 TOY 上有：关注状态
+  setImmersive?(on: boolean): Promise<void>;
 }
 ```
+
+SDK 不提供用户 UID，`getUserProfile` 要用户确认才返回头像和昵称；这几个工具都用不到用户身份，不调用它。
 
 ## 4. 信息结构
 
@@ -73,7 +83,7 @@ export interface Platform {
 | `/` | 首页：我是谁、最新视频、小工具、作品精选、关注方式 | 工具箱合集的首页换成“工具列表 + 一句介绍 + 关注” |
 | `/works/` | 作品：视频、摄影、其他，按类别切换 | 不放 |
 | `/works/videos/` | 全部视频 | 不放 |
-| `/works/photos/` | 摄影（第 6 阶段） | 视验证结果决定 |
+| `/works/photos/` | 摄影（第 6 阶段） | 视情况 |
 | `/tools/` | 工具箱 | 有 |
 | `/tools/<id>/` | 单个工具 | 有（合集里一页，或单独一个 TOY） |
 | `/about/` | 关于：介绍、设备、联系方式 | 不放 |
@@ -89,13 +99,14 @@ src/
     root.tsx              HTML 外壳、主题、字体、View Transitions
     routes.ts             由页面登记表生成的路由
   toy/
-    entry.tsx             TOY 入口：内存路由，挂同一批页面
+    entry.tsx             TOY 入口：哈希路由，挂同一批页面；处理 ?p= 深链
   shell/                  全站外壳：顶栏、页脚、命令面板、主题切换、轻提示、过渡
+    tool/                 工具外壳：桌面布局和手机布局（底部抽屉）
   design/
     tokens.css            雾林令牌，唯一的数值来源
     global.css            Tailwind 入口与基础样式
   ui/                     shadcn 组件（改成雾林样式）与雾林自有组件
-  platform/               平台适配层：web.ts、toy.ts、index.ts
+  platform/               平台适配层：web.ts、toy.ts、index.ts；types/toy.d.ts 用官方声明
   pages/                  首页、作品、工具箱、关于（只组合 shell、ui 和内容数据）
   content/
     schema.ts             Zod 结构
@@ -105,17 +116,16 @@ src/
     registry.ts           工具登记：id、名称、图标、状态、关键词、能否上 TOY
     watermark/
       meta.ts
-      Tool.tsx            界面：只用 ui/、shell/ 的工具外壳组件和 platform/
+      Tool.tsx            界面：只用 ui/、shell/ 和 platform/
       logic/              纯函数：不碰 React 和 DOM，Vitest 测
       store.ts
     random-picker/
     text-batch/
 scripts/
   fetch-videos.ts         拉取 B 站视频数据
-  build-toy.ts            按目标打 TOY 包并跑 TOY 检查
+  toy.ts                  TOY 打包、检查、生成封面和图标、调用官方 CLI
 toy/
-  toolbox/toy.yaml        工具箱合集的 TOY 记录（id、路径、地址）
-  watermark/toy.yaml      单个工具的 TOY 记录
+  <目标>.json             每个 TOY 的记录：id、路径、标题、分类、可见性（更新时据此保持同一个地址）
 ```
 
 依赖方向只能往下：`pages`、`tools` → `shell`、`ui`、`platform`、`content` → `design`。几条硬规矩：
@@ -128,42 +138,77 @@ toy/
 ## 6. 页面过渡与动效
 
 - 网站：页面切换用 View Transitions（React Router 的 `viewTransition` 导航，或 React 自带的 `ViewTransition` 组件，开工时按当时的推荐做法选一个）。工具卡片的图标块和工具名用 `tool-<id>-icon`、`tool-<id>-name` 做共享元素。
-- TOY：内存路由切换时同样包一层 `document.startViewTransition`，不支持时直接切换。
+- TOY：哈希路由切换时同样包一层 `document.startViewTransition`，不支持时直接切换。
 - 主题切换的圆形扩散、雾散入场、按压反馈等，全部按设计系统「动效」一节，原型里已经实现过一遍，可以直接参考。
 
 ## 7. 手机优先的工具布局
 
-TOY 的访客几乎都在手机上，所以每个工具都要先有手机布局，再有桌面布局：
+TOY 的访客几乎都在手机上，所以每个工具都先有手机布局，再有桌面布局。第 0 阶段已经做出第一版（随机抽取）：
 
-- 舞台（预览区）占上半屏；控制栏是底部抽屉，有收起和展开两档；主按钮固定在最底下。
-- 文件从相册选、拍照或粘贴进来；导出走平台适配层的 `saveImage`。
-- 这一版设计系统只画了手机首页，**第 3 阶段开工前要先补画手机版工具外壳**。
+- 顶栏：返回、工具图标和名字、全屏。
+- 舞台占满中间，四角取景框。
+- 底部抽屉：收起时只露出把手和一行摘要（如“名单 10 人 · 已抽 1 人”），点一下或往上拖展开全部设置；开始操作时自动收起。
+- 主按钮固定在最底下，留出安全区。
+- 文件从相册选、拍照或粘贴进来；导出走平台适配层。
 
-## 8. 构建与发布
+正式开工时把这版补进设计系统，再按它实现其他工具。
+
+## 8. 一份代码，两种打包
+
+TOY 不靠“发布前转换网站产物”实现，而是在构建时就打出两种包。网站产物是多个 HTML、根路径和浏览器路由，事后改写容易漏，所以从源头分开：
 
 | 命令 | 作用 |
 |---|---|
 | `npm run dev` | 本地开发网站 |
 | `npm run build:web` | 构建网站，输出 `build/client/`（Cloudflare Pages 的输出目录） |
-| `npm run build:toy -- toolbox` | 打工具箱合集的 TOY 包，输出 `dist-toy/toolbox/` |
-| `npm run build:toy -- watermark` | 打单个工具的 TOY 包 |
+| `npm run toy -- <目标>` | 打 TOY 包并检查，输出 `dist-toy/<目标>/`，**不上传** |
+| `npm run toy -- <目标> --preview` | 打包、检查后用官方 CLI 上传拿预览链接（需你确认） |
+| `npm run toy -- <目标> --publish` | 用记录里的 id 创建或更新，提交审核（需你确认） |
 | `npm run check` | 类型检查、ESLint、Vitest |
-| `npm run e2e` | Playwright：网站跑一遍；TOY 包放在本地的 `/toy/test/` 路径下再跑一遍，专门抓资源路径写错的问题 |
+| `npm run e2e` | Playwright：网站跑一遍；TOY 包挂在本地 `/toy/test/` 路径下再跑一遍 |
+
+`toy` 脚本做的事：
+
+1. 用 TOY 模式构建：相对路径、哈希路由、注入官方 SDK（`toy-sdk.js`）、选择打哪些页面（工具箱合集或单个工具）。
+2. 检查：根目录有 `index.html`；没有会被平台过滤的文件后缀；HTML、CSS、JS 里没有 `/` 开头的本地资源；引入了 SDK；有 `<title>`；总大小不超过上限。任何一项不过就停下。
+3. 生成封面（4:3，1200 × 900）和图标（1:1，500 × 500）：用雾林样式的模板自动截图，每个工具一套。
+4. 需要上传时才调用官方 CLI：`toy create <目录> --category TOOL --visibility <可见性> --poster … --icon …`，或 `toy update <id> <目录>`；结果写回 `toy/<目标>.json`。
 
 发布：
 
-- **网站**：推送 `main` 后由 Cloudflare Pages 自动构建上线。推送就是上线，所以每次推送前先找你确认。其他分支自动生成预览地址，大改动先在预览上看。
-- **TOY**：本地打包 → 跑 `bili-toy-publisher` 技能的 TOY 检查 → 生成预览链接给你看 → 你确认后创建或更新 → 等审核。`toy/<目标>/toy.yaml` 记住项目 id，保证更新不换地址。TOY 的路径发布后不能改，第一次起名要定好。
+- **网站**：推送 `main` 后由 Cloudflare Pages 自动构建上线。推送就是上线，所以每次推送前先找你确认。其他分支自动生成预览地址。
+- **TOY**：任何上传（包括只拿预览）、创建、更新都要你先同意。每次发布都会生成一条绑定的动态：“所有人可见”会进 TOY 广场、粉丝关注流和你的主页；“链接访问”只有拿到链接的人能看；“密码访问”还会隐藏动态的封面和名称。路径发布后不能改，第一次起名要定好。
 
-## 9. 先验证，再动手
+## 9. 第 0 阶段
 
-TOY 有几件事从文档里确认不了，影响后面的设计，第 0 阶段先发一个只生成预览、不公开的最小 TOY 测出来：
+### 已完成（本地，未上传）
 
-1. 页面是不是直接跑在 `www.bilibili.com` 这个源下。如果是，本地存储和所有 TOY、甚至 B 站主站共用，**任何密钥都不能存进去**（直接影响批量文本处理）。
-2. 能不能请求第三方接口（大模型接口、字体和图片的 CDN）。
-3. SDK 的具体接口：存相册、云存档、关注状态、分享。开发者文档页需要开通发布权限才能看，需要你登录后打开，或者把文档内容给我。
-4. 内存路由下，App 的返回键是退出 TOY 还是能拦截。
-5. 字体切片和工具代码打包后，体积离 20MB 有多远。
+- 读完官方使用手册、常见问题、JS SDK、CLI 文档，结论已写进第 3 节和第 8 节。
+- 做了一个探针包（本机 `.local/toy-probe/`，不进仓库），用的就是正式方案的技术栈：React 19.3 + React Router 8.5 + Vite 8.3，TOY 模式打包。
+  - 包含：运行环境自动检测页（环境、浏览器能力、存储、网络、SDK）；手动测试按钮（B 站跳转、外链、存相册、分享图片、分享深链、二维码）；手机版工具外壳（随机抽取）。
+  - 打包结果：4 个文件，336KB；首屏脚本 gzip 后约 104KB，大头是 React 和 React Router 本身。
+- 写了打包检查脚本，并故意喂了一个错误的包确认它能拦住：被过滤的 `.avif`、根路径资源、缺 SDK 都报错停下。
+- 在本地模拟的 `/toy/probe-local/` 路径下跑通：资源能加载；哈希路由跳转、刷新后留在原页、`?p=/tool` 深链都正常；SDK 能从 B 站 CDN 加载。
+
+### 还要在 B 站 App 里测（需要上传，等你同意）
+
+1. TOY 页面是不是和 B 站主站同源、本地存储是不是和别的页面共用（检测页会显示已有键的数量，以及能不能读到登录状态，只判断有无，不读具体内容）。这决定批量文本处理能不能在 TOY 上保存接口密钥。
+2. 云存储、作者资料、关注状态这几个接口能不能用（本地调用会超时，属正常）。
+3. 存相册、分享图片、分享深链、二维码、全屏在 App 里的实际效果。
+4. 外链（henjihenji.com）在 App 里怎么打开。
+5. 手机返回键在哈希路由下是回到上一页还是退出 TOY。
+6. 手机版工具外壳在真机上的手感：抽屉拖动、安全区、字号。
+
+### 还要你决定
+
+- 是否安装官方 Toy CLI（PowerShell 一行命令，从 B 站的服务器下载安装脚本并执行）和官方 Toy 技能（`npx skills add bilibili/toy`）。
+- 探针用哪种方式上传：
+  - 只上传拿预览链接：不发布、不生成动态、不过审核；但云存储等能力在预览态可能用不了。
+  - 用“密码访问”发布：生成一条隐藏封面和名称的动态，要过审核，测得最全；测完可以删除。
+
+### 旧技能的过时说法
+
+本机的 `bili-toy-publisher` 技能有三处和官方文档对不上：它说不能用 `#` 路由（官方现在推荐哈希路由），说包体建议 20MB（你的账号上限是 140MB），命令行脚本默认连的是 B 站内部地址。TOY 相关的事以官方文档和官方 CLI 为准。
 
 ## 10. 阶段
 
@@ -171,18 +216,18 @@ TOY 有几件事从文档里确认不了，影响后面的设计，第 0 阶段�
 
 | 阶段 | 内容 | 上线 |
 |---|---|---|
-| 0 | TOY 验证（上面 5 件事）；补画手机版工具外壳 | 只出 TOY 预览 |
-| 1 | 项目骨架：两个构建目标、令牌、ui 组件、shell、平台适配层、检查与冒烟测试；Cloudflare 构建设置改为 `npm run build:web` / `build/client` | 网站预览分支 |
+| 0 | TOY 规则调研、探针包、打包检查脚本、手机版工具外壳（本地已完成）；在 App 里实测（待你同意上传） | TOY 预览或密码访问 |
+| 1 | 项目骨架：两种打包、令牌、ui 组件、shell、平台适配层、检查与冒烟测试；Cloudflare 构建设置改为 `npm run build:web` / `build/client` | 网站预览分支 |
 | 2 | 首页、作品（视频，构建时拉取）、关于；替换现在的首页 | 网站 |
 | 3 | 工具外壳（桌面 + 手机）和随机抽取（最简单，先跑通整条链路） | 网站 + 第一个 TOY |
-| 4 | 迁入水印工具；TOY 版接 SDK 存相册；`wmt.henjihenji.com` 301 到新地址 | 网站 + TOY |
-| 5 | 迁入批量文本处理；TOY 版做不做、怎么存接口密钥，按第 0 阶段的结果定 | 网站（TOY 待定） |
-| 6 | 摄影作品：图片放 Cloudflare R2，上传时生成多尺寸；作品页加“摄影” | 网站 |
+| 4 | 迁入水印工具；TOY 版接存相册和分享图片；`wmt.henjihenji.com` 301 到新地址 | 网站 + TOY |
+| 5 | 迁入批量文本处理；TOY 版做不做、怎么存接口密钥，按第 0 阶段的实测结果定 | 网站（TOY 待定） |
+| 6 | 摄影作品：图片放 Cloudflare R2，上传时生成多尺寸（TOY 版不用 `.avif`）；作品页加“摄影” | 网站 |
 | 7 | 收尾：删掉旧的独立 Pages 项目；GitHub Pages 关掉或只留跳转页 | — |
 
 ## 11. 完成标准
 
-- 首页脚本（含 React）在 gzip 后控制在 100KB 以内；4G 网络下最大内容绘制不超过 2 秒。
+- 首页首屏脚本 gzip 后不超过 130KB（React 19 + React Router 8 本身约 100KB）；4G 网络下最大内容绘制不超过 2 秒。
 - 每个工具的 `logic/` 有 Vitest；Playwright 在两个目标上都能打开首页和每个工具、完成主操作，控制台没有报错。
 - 两套主题的文字对比度沿用设计系统里已校验的令牌；所有功能都能用键盘完成；尊重“减少动态效果”。
-- TOY 包通过 `bili-toy-publisher` 的检查：没有根路径资源、没有 `#` 跳转、外部链接都走脚本。
+- TOY 包通过 `toy` 脚本的检查：没有会被过滤的文件、没有根路径资源、引入了 SDK、大小在上限内。

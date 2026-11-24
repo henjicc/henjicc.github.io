@@ -37,13 +37,13 @@ template_version: 27
 
 ## 按职责指定的库（已批准，尚未安装）
 
-以 [`docs/development-plan.md`](../docs/development-plan.md) 第 2 节的表为准，版本以将来的锁文件为准。核心是 React + TypeScript、React Router 7（框架模式，网站预渲染、TOY 用内存路由）+ Vite、Tailwind CSS v4、shadcn/ui、Lucide、Motion、Zustand、Zod、Vitest、Playwright。2026-11-24 用户同意从 Astro 改为这一套。
+以 [`docs/development-plan.md`](../docs/development-plan.md) 第 2 节的表为准，版本以将来的锁文件为准。核心是 React + TypeScript、React Router 8（网站用框架模式预渲染，TOY 用哈希路由）+ Vite、Tailwind CSS v4、shadcn/ui、Lucide、Motion、Zustand、Zod、Vitest、Playwright。2026-11-24 用户同意从 Astro 改为这一套。
 
 ## 部署与权威入口
 
 - Cloudflare Pages 项目 `henji`（henjicc 这个 Cloudflare 账户）连接本仓库：生产分支 `main`，自动部署；构建命令为空，输出就是仓库根目录。域名为 `henjihenji.com`、`www.henjihenji.com`、`henji.pages.dev`，DNS 也托管在这个账户。另一个 Cloudflare 账户里没有本站。重构上线时把构建命令改为 `npm run build:web`、输出目录改为 `build/client`。
 - GitHub Pages（`henjicc.github.io`）也直接发布仓库根目录，和 Cloudflare 是同一份内容。
-- B 站 TOY：还没有发布过。发布一律走 `bili-toy-publisher` 技能（先预览、用户确认后再创建或更新，每次都要过审核）；每个 TOY 的 id 和路径记在 `toy/<目标>/toy.yaml`，路径发布后不能改。
+- B 站 TOY：还没有发布过。发布用 B 站官方 Toy CLI（`toy create` / `toy update`，尚未安装），由 `npm run toy` 脚本先打包检查再调用；每个 TOY 的 id 和路径记在 `toy/<目标>.json`，路径发布后不能改。第 0 阶段的探针包在 `.local/toy-probe/`（不进仓库）。
 - 品牌：Logo 是 `index.html` 里内联的 SVG（“C”形线框），`icons/favicon.svg` 是网站图标。品牌色是 Logo 渐变里的天蓝，rgb(0,160,234) → rgb(6,182,255)，设计系统里叫 `sky`。
 - 社交链接（B 站、YouTube、小红书、抖音）写在 `index.html` 的“关注我”弹窗里；这些是作者公开的主页地址，属于网站内容。
 - 允许提交媒体的目录以 `.githooks/media-allowlist` 为准：`imgs/`（主页背景图，也是设计系统里的场景照片）、`icons/`（网站图标）、`tools/*/icons/`（工具图标）。
@@ -55,7 +55,9 @@ template_version: 27
 - 工具链接要写成目录路径（`./tools/random-picker/`）。2025-12 写成 `.../index.html` 时线上打不开，改成目录路径后正常。
 - `package.json` 的 `build` 脚本指向已经删掉的 `tools/watermark-tool` 子模块，跑不起来。Pages 的构建命令为空，所以线上不受影响。重构时替换掉。
 - 浏览器本地存储按域名隔开。工具从子域名搬到主站后，访客在旧地址存的设置不会带过来。
-- **TOY 和网站不是同一种运行环境**：页面跑在 `/toy/<路径>/` 下，只能用相对路径；不支持 `#` 跳转，也不能用 `pushState` 改地址；直接写的外部链接会被平台改写坏；包体建议在 20MB 以内。所以页面和工具不能直接用 `window.open`、`localStorage`、`location`，统一走平台适配层（见开发方案第 3 节）。TOY 是否和 B 站主站同源、能否请求第三方接口还没验证，验证前不往 TOY 的本地存储里放任何密钥。
+- **TOY 和网站不是同一种运行环境**（依据官方文档，2026-11-24）：页面跑在 `/toy/<路径>/` 下，只能用相对路径；路由用哈希模式（`#/xxx`，官方推荐），分享深链只能带 query；只发布白名单后缀的文件（`.avif`、`.txt`、`.map` 等会被过滤）；当前账号包体上限 140MB。B 站内跳转、存相册、分享、设置记忆都走官方 SDK。所以页面和工具不能直接用 `window.open`、`localStorage`、`location`，统一走平台适配层（见开发方案第 3 节）。TOY 是否和 B 站主站同源还没在 App 里实测，实测前不往 TOY 的本地存储里放任何密钥。
+- 本机的 `bili-toy-publisher` 技能有几处已经过时（说不能用 `#` 路由、包体 20MB、命令行脚本连 B 站内部地址）。TOY 的事以官方文档和官方 Toy CLI 为准。
+- **TOY 的任何上传都要先经用户同意**，包括只拿预览链接（用户要求，2026-11-24）。每次发布还会生成一条绑定的动态。
 - 根目录的 `henjicc.github.io.zip` 是用户自己的备份，未跟踪。不要提交，也不要删除。
 - `.trae/` 是以前用 Trae 编辑器留下的笔记，已被忽略。
 

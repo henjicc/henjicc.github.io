@@ -164,11 +164,34 @@ function marksInUse(presets: readonly Preset[] = useLibrary.getState().presets):
   ];
 }
 
+type LibraryData = { marks: Record<string, Mark>; presets: Preset[] };
+
+/**
+ * 在 current 上撤掉 before → next 这一步增删的预设和水印图片，别的保持 current 的样子。
+ * 不能直接退回 before：等写入结果的时候用户可能又删了预设、加了图片，整体退回会把这些改动一起抹掉。
+ */
+function revertChange(current: LibraryData, before: LibraryData, next: LibraryData): LibraryData {
+  const beforeIds = new Set(before.presets.map((p) => p.id));
+  const nextIds = new Set(next.presets.map((p) => p.id));
+  const presets = current.presets.filter((p) => beforeIds.has(p.id) || !nextIds.has(p.id));
+  before.presets.forEach((p, i) => {
+    if (!nextIds.has(p.id) && !presets.some((q) => q.id === p.id)) presets.splice(Math.min(i, presets.length), 0, p);
+  });
+  const marks = { ...current.marks };
+  for (const [id, mark] of Object.entries(next.marks)) {
+    if (!(id in before.marks) && marks[id] === mark) delete marks[id];
+  }
+  for (const [id, mark] of Object.entries(before.marks)) {
+    if (!(id in next.marks) && !(id in marks)) marks[id] = mark;
+  }
+  return { marks, presets };
+}
+
 /**
  * 改预设库都走这里：先按整库预算检查，写进去之后确认存储里真的有了。
- * 超预算或写不进去时抛 LibraryFullError，内存里的库也退回原样，界面不会显示一个重载后就没了的预设。
+ * 超预算或写不进去时抛 LibraryFullError，内存里也撤掉这次的改动，界面不会显示一个重载后就没了的预设。
  */
-async function commitLibrary(change: (library: { marks: Record<string, Mark>; presets: Preset[] }) => { marks: Record<string, Mark>; presets: Preset[] }) {
+async function commitLibrary(change: (library: LibraryData) => LibraryData) {
   const before = useLibrary.getState();
   const next = change({ marks: before.marks, presets: before.presets });
   if (librarySize(next) > LIBRARY_BUDGET && librarySize(next) > librarySize(before)) {
@@ -176,7 +199,7 @@ async function commitLibrary(change: (library: { marks: Record<string, Mark>; pr
   }
   useLibrary.setState(next);
   if (await libraryWritten()) return;
-  useLibrary.setState({ marks: before.marks, presets: before.presets });
+  useLibrary.setState(revertChange(useLibrary.getState(), before, next));
   throw new LibraryFullError("浏览器的本机存储满了，没存上。删掉几个带图片的预设再试");
 }
 

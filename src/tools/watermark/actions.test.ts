@@ -41,6 +41,38 @@ describe("预设库存不下时", () => {
     expect(useLibrary.getState().presets.map((p) => p.name)).toEqual(["第一个"]);
     expect(await storedNames()).toEqual(["第一个"]);
   });
+
+  it("等写入结果时又删了别的预设：只撤掉没存上的这个，删掉的不会被放回来", async () => {
+    await savePreset("第一个");
+    const [first] = useLibrary.getState().presets;
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("full", "QuotaExceededError");
+    });
+    const saving = savePreset("第二个");
+    deletePreset(first!.id);
+    await expect(saving).rejects.toThrow("本机存储满了");
+    expect(useLibrary.getState().presets).toEqual([]);
+  });
+
+  it("等写入结果时又加了水印图片：撤掉没存上的预设，留下那张图片", async () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("full", "QuotaExceededError");
+    });
+    const saving = savePreset("没存上");
+    const other = { id: "other", ...tinyMark(9) };
+    useLibrary.setState((l) => ({ marks: { ...l.marks, other } }));
+    await expect(saving).rejects.toThrow("本机存储满了");
+    expect(useLibrary.getState().presets).toEqual([]);
+    expect(useLibrary.getState().marks).toEqual({ other });
+  });
+
+  it("导入带图片的预设没存上：预设和它带来的图片都撤掉", async () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("full", "QuotaExceededError");
+    });
+    await expect(importPresetText(presetFile("甲", tinyMark(1)))).rejects.toThrow("本机存储满了");
+    expect(useLibrary.getState()).toMatchObject({ presets: [], marks: {} });
+  });
 });
 
 it("撤销删除：撤销前水印图片已被清理，也能把图片一起放回去", async () => {

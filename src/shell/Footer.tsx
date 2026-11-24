@@ -11,7 +11,7 @@ export function Footer() {
       </div>
       <nav aria-label="平台" className="flex flex-wrap gap-5">
         {site.social.map((link) => (
-          <ExternalLink key={link.id} link={link} className="focus-ring rounded-xs hover:text-sky-text" />
+          <ExternalLink key={link.id} link={link} className="focus-ring inline-flex items-center rounded-xs hover:text-sky-text max-md:min-h-11" />
         ))}
       </nav>
       {/* 注明字体是 MiSans 许可的要求。年份在预渲染和访问时可能跨年，不算错误。 */}

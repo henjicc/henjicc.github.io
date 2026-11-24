@@ -40,7 +40,7 @@ function Segmented<T extends string>({ label, value, onValueChange, options, blo
             key={o.value}
             value={o.value}
             className={cn(
-              "relative inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-sm border-0 bg-transparent px-3 text-ui transition-colors duration-(--dur-quick) ease-out focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring",
+              "relative inline-flex h-8 cursor-pointer max-md:h-11 items-center gap-1.5 rounded-sm border-0 bg-transparent px-3 text-ui transition-colors duration-(--dur-quick) ease-out focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring",
               on ? "text-ink" : "text-ink-muted",
               block && "flex-1 justify-center",
             )}

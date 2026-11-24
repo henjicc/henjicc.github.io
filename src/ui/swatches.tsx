@@ -31,7 +31,7 @@ function Swatches({
           value={c.value}
           aria-label={c.name}
           style={{ background: c.value }}
-          className="size-8 cursor-pointer rounded-sm border border-line-strong p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring data-[state=checked]:outline-2 data-[state=checked]:outline-offset-2 data-[state=checked]:outline-focus-ring"
+          className="size-8 cursor-pointer max-md:size-11 rounded-sm border border-line-strong p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring data-[state=checked]:outline-2 data-[state=checked]:outline-offset-2 data-[state=checked]:outline-focus-ring"
         />
       ))}
     </RadioGroup.Root>

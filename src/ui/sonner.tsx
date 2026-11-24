@@ -25,7 +25,7 @@ function Toaster(props: ToasterProps) {
           title: "m-0 text-ui",
           description: "mt-0.5 text-caption text-ink-muted [overflow-wrap:anywhere]",
           actionButton:
-            "focus-ring h-7 flex-none cursor-pointer rounded-sm border-0 bg-transparent px-2 text-caption font-semibold text-sky-text hover:bg-sky-soft",
+            "focus-ring h-7 flex-none max-md:h-11 cursor-pointer rounded-sm border-0 bg-transparent px-2 text-caption font-semibold text-sky-text hover:bg-sky-soft",
         },
       }}
       {...props}

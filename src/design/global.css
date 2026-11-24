@@ -340,6 +340,26 @@
   }
 }
 
+/* 菜单按钮展开时三条线变成关闭的 X（Lucide menu 图标的三条 path，y 分别是 5、12、19）。用样式变形，不为它多加载一个图标 */
+@utility menu-x {
+  & path {
+    transform-box: view-box;
+    transform-origin: 12px 12px;
+    transition:
+      transform var(--dur-base) var(--ease-out),
+      opacity var(--dur-quick) var(--ease-out);
+  }
+  &[aria-expanded="true"] path:nth-child(1) {
+    transform: rotate(45deg) translateY(7px);
+  }
+  &[aria-expanded="true"] path:nth-child(2) {
+    opacity: 0;
+  }
+  &[aria-expanded="true"] path:nth-child(3) {
+    transform: rotate(-45deg) translateY(-7px);
+  }
+}
+
 /* 取景框里再放一个带取景框的区域（如舞台里的拖放区）时，只留外面那一圈 */
 .vf .vf::before {
   content: none;

@@ -1,4 +1,4 @@
-import { ChevronDown, Menu, Moon, Search, Sun, X } from "lucide-react";
+import { ChevronDown, Menu, Moon, Search, Sun } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { Link, NavLink } from "react-router";
 import type { ToolEntry } from "~/tools/types";
@@ -64,10 +64,10 @@ function MobileMenu({ scene }: { scene: boolean }) {
     <>
       {/* 菜单开着时整页（包括这个按钮）被 Radix 设成不可点，点它其实是点在菜单外面，菜单照样会关上 */}
       <IconButton
-        icon={open ? X : Menu}
+        icon={Menu}
         label={open ? "关闭菜单" : "菜单"}
         aria-expanded={open}
-        className={cn("md:hidden", scene && "text-on-scene hover:not-disabled:bg-mist")}
+        className={cn("menu-x md:hidden", scene && "text-on-scene hover:not-disabled:bg-mist")}
         onClick={() => {
           setLoaded(true);
           setOpen(true);

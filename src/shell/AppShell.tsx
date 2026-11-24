@@ -6,7 +6,6 @@ import { useShellRoute } from "./handle";
 import { useHydrated, useIsMobile } from "./media";
 import { preloadPalette, togglePalette, usePalette } from "./palette";
 import { SiteHeader, useSceneHeaderMode } from "./SiteHeader";
-import { syncThemeColor } from "./theme";
 
 // 浮层和轻提示都按需加载：首页首屏的包里只有 React、路由和页面本身（目标 gzip ≤145KB，见开发方案第 11 节）。
 const CommandPalette = lazy(preloadPalette);
@@ -28,12 +27,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   useEffect(() => setImagePresenter(setPreviewSrc), []);
 
+  // 外壳整个页面生命周期都在，不用取消监听
   useEffect(() => {
-    syncThemeColor();
-    // 跟随系统时，系统切换深浅色也要跟着换
-    const mq = window.matchMedia("(prefers-color-scheme: light)");
-    mq.addEventListener("change", syncThemeColor);
-    return () => mq.removeEventListener("change", syncThemeColor);
+    void import("./theme-color").then((m) => m.watchThemeColor());
   }, []);
 
   useEffect(() => {

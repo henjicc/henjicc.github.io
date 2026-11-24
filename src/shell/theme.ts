@@ -25,22 +25,8 @@ function applyChoice(choice: ThemeChoice) {
   if (choice === "system") delete root.dataset.theme;
   else root.dataset.theme = choice;
   useThemeStore.setState({ choice });
-  syncThemeColor();
+  void import("./theme-color").then((m) => m.syncThemeColor());
   void platform.storage.local(THEME_STORE.namespace).set(THEME_STORE.key, choice === "system" ? undefined : choice);
-}
-
-/**
- * 手机浏览器地址栏、状态栏的颜色（meta theme-color）跟着当前主题的 ground 走。颜色从令牌读，不在这里另写一份；
- * 所以要等样式表生效后（水合后、切换主题时、系统深浅色变化时）由外壳调用。
- */
-export function syncThemeColor() {
-  let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
-  if (!meta) {
-    meta = document.createElement("meta");
-    meta.name = "theme-color";
-    document.head.append(meta);
-  }
-  meta.content = getComputedStyle(document.documentElement).getPropertyValue("--ground").trim();
 }
 
 function cssMs(name: string): number {

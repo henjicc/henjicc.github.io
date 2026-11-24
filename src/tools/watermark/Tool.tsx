@@ -74,21 +74,26 @@ export default function Watermark() {
 
   useEffect(() => () => clearTimeout(doneTimer.current), []);
 
-  function reportAlbum(r: Extract<ExportOutcome, { kind: "album" }>, total: number) {
+  /**
+   * retrying：这一轮是在重试上一轮没存上的图。重试轮里哪怕只剩一张，同批的其他图也已经在相册里了，
+   * 失败后必须继续给出重试按钮；否则主按钮回到“存 N 张到相册”，再点会把已存的图又存一遍。
+   */
+  function reportAlbum(r: Extract<ExportOutcome, { kind: "album" }>, total: number, retrying: boolean) {
     if (!r.failed.length) {
       toast.success(r.saved.length === 1 ? "已存到相册" : `已存 ${r.saved.length} 张到相册`);
       return;
     }
     if (r.shown && !r.saved.length) {
+      if (retrying) setRetry({ ids: r.failed, key: targetKey() });
       toast("这里存不了相册，长按图片保存");
       return;
     }
-    if (total === 1) {
+    if (total === 1 && !retrying) {
       toast.error(r.error instanceof Error && /[一-龥]/.test(r.error.message) ? r.error.message : "没存上，再试一次");
       return;
     }
     setRetry({ ids: r.failed, key: targetKey() });
-    toast.error(r.saved.length ? `已存 ${r.saved.length} 张，${r.failed.length} 张没存上` : `${r.failed.length} 张都没存上`);
+    toast.error(r.saved.length ? `已存 ${r.saved.length} 张，${r.failed.length} 张没存上` : total === 1 ? "这张还是没存上" : `${r.failed.length} 张都没存上`);
   }
 
   async function runExport(only?: readonly ImageItem[]) {
@@ -104,7 +109,7 @@ export default function Watermark() {
     setProgress({ done: 0, total: items.length });
     try {
       const r = await exportImages(items, useApp.getState(), marks, (n) => setProgress({ done: n, total: items.length }));
-      if (r.kind === "album") reportAlbum(r, items.length);
+      if (r.kind === "album") reportAlbum(r, items.length, only !== undefined);
       if (r.kind === "downloaded") {
         setDone(true);
         clearTimeout(doneTimer.current);

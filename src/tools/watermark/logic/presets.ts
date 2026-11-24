@@ -1,6 +1,6 @@
 // 预设和水印图片的数据结构，以及预设的导入导出（文件或“预设代码”是同一段 JSON）。
 import { z } from "zod";
-import { FACTORY_MARK, migrateOffsetsV1, parseMarkSettings, type MarkSettings } from "./settings";
+import { estimateV1Box, FACTORY_MARK, migrateOffsetsV1, parseMarkSettings, type MarkSettings, type SizeUnit } from "./settings";
 
 /**
  * 每张水印图片 data URL 的目标长度（字符）。图片和预设整个存在一个 localStorage 键里，
@@ -79,8 +79,9 @@ export class PresetImportError extends Error {}
 /**
  * 导入：认本工具导出的格式和旧版水印工具导出的数组。每个预设和水印图片都换新 id，追加而不覆盖。
  * 看不懂的条目跳过；一个都读不出来时抛 PresetImportError。
+ * unit 是当前的大小单位：旧文件不带单位，换算第 1 版位移时按它估水印占图多大。
  */
-export function importPresets(text: string, newId: () => string): { presets: Preset[]; marks: Mark[] } {
+export function importPresets(text: string, newId: () => string, unit: SizeUnit = "percent"): { presets: Preset[]; marks: Mark[] } {
   let data: unknown;
   try {
     data = JSON.parse(text);
@@ -101,7 +102,8 @@ export function importPresets(text: string, newId: () => string): { presets: Pre
       const p = presetSchema.safeParse(raw);
       if (!p.success) continue;
       const parsed = parseMarkSettings(p.data.settings);
-      const settings = file.data.version < 2 ? migrateOffsetsV1(parsed) : parsed;
+      const mark = p.data.mark;
+      const settings = file.data.version < 2 ? migrateOffsetsV1(parsed, estimateV1Box(parsed, { unit, markAspect: mark && mark.height / mark.width })) : parsed;
       settings.markId = p.data.mark ? addMark(p.data.mark) : null;
       presets.push({ id: newId(), name: p.data.name, createdAt: p.data.createdAt, settings });
     }
@@ -111,17 +113,17 @@ export function importPresets(text: string, newId: () => string): { presets: Pre
       if (!p.success) continue;
       const old = p.data.settings;
       // 旧版工具的位移和本工具第 1 版是同一套含义
-      const settings = migrateOffsetsV1(
-        parseMarkSettings({
-          ...old,
-          // 旧版的间隔是原图像素，换算不了，留空让它取默认值
-          spacingX: undefined,
-          spacingY: undefined,
-          position: old.position === "full-screen" ? "tile" : old.position,
-          font: legacyFont(old.fontFamily),
-          markId: null,
-        }),
-      );
+      const parsed = parseMarkSettings({
+        ...old,
+        // 旧版的间隔是原图像素，换算不了，留空让它取默认值
+        spacingX: undefined,
+        spacingY: undefined,
+        position: old.position === "full-screen" ? "tile" : old.position,
+        font: legacyFont(old.fontFamily),
+        markId: null,
+      });
+      const markAspect = old.imageWidth && old.imageHeight ? old.imageHeight / old.imageWidth : undefined;
+      const settings = migrateOffsetsV1(parsed, estimateV1Box(parsed, { unit, markAspect }));
       const mark = markSchema.safeParse({ name: old.imageName, dataUrl: old.imageData, width: old.imageWidth, height: old.imageHeight });
       if (mark.success) settings.markId = addMark(mark.data);
       else if (settings.type === "image") settings.type = "text";

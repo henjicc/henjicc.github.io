@@ -101,14 +101,43 @@ export class TimeoutError extends Error {
   }
 }
 
+/**
+ * 任一信号中止时中止，并带上它的 reason。AbortSignal.any 要 Safari 17.4+，更早的 Safari 上直接调用会抛 TypeError，
+ * 界面只会显示成“连不上接口”，所以缺失时手动转发。dispose 移除转发用的监听：用户的停止信号会跨多个请求存活，不移除会越积越多。
+ */
+export function combineSignals(
+  signals: AbortSignal[],
+  any: ((signals: AbortSignal[]) => AbortSignal) | null = AbortSignal.any?.bind(AbortSignal) ?? null,
+): { signal: AbortSignal; dispose: () => void } {
+  if (any) return { signal: any(signals), dispose: () => {} };
+  const controller = new AbortController();
+  const dispose = () => {
+    for (const s of signals) s.removeEventListener("abort", onAbort);
+  };
+  function onAbort(this: AbortSignal) {
+    dispose();
+    controller.abort(this.reason);
+  }
+  const already = signals.find((s) => s.aborted);
+  if (already) {
+    controller.abort(already.reason);
+  } else {
+    for (const s of signals) s.addEventListener("abort", onAbort);
+  }
+  return { signal: controller.signal, dispose };
+}
+
 /** 停止信号和超时合在一起传给 fetch；超时抛 TimeoutError，用户停止仍抛 AbortError。 */
 async function withTimeout<T>(ms: number, signal: AbortSignal | undefined, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
   const timeout = AbortSignal.timeout(ms);
+  const combined = signal ? combineSignals([signal, timeout]) : { signal: timeout, dispose: () => {} };
   try {
-    return await run(signal ? AbortSignal.any([signal, timeout]) : timeout);
+    return await run(combined.signal);
   } catch (e) {
     if (timeout.aborted && !signal?.aborted) throw new TimeoutError(ms);
     throw e;
+  } finally {
+    combined.dispose();
   }
 }
 

@@ -40,8 +40,11 @@ export interface Platform {
     settings(namespace: string): KeyValueStore;
     /** 较大的输入（名单、文本）和需要随时保存的进度：两边都存 localStorage，防止侧滑退出或重新加载后丢失。 */
     local(namespace: string): KeyValueStore;
-    /** 立即写出所有还没发送的设置。 */
-    flush(): Promise<void>;
+    /**
+     * 写出所有还没发送的设置，等写入有了结果再返回：true 表示都已写进去（或本来就没有待写的）。
+     * false 表示这次没写成（TOY 云存储失败、在退避或限频中、或这里用不了云存储），值仍在本机，之后会自动重试。
+     */
+    flush(): Promise<boolean>;
     /**
      * 只有网站有：读重构前的旧站点在同一域名下写的 localStorage 原始键（不带 henji: 前缀），用于一次性导入旧数据。
      * 只读不写，旧键留着不动。TOY 从来没有旧数据，所以没有这个方法。

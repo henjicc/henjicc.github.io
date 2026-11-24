@@ -47,7 +47,10 @@ export function createWebPlatform(): Platform {
     storage: {
       settings: localStore,
       local: localStore,
-      async flush() {},
+      // 设置直接写 localStorage，没有待发送的
+      async flush() {
+        return true;
+      },
       async legacy(key) {
         return readLocalJson(key);
       },

@@ -132,6 +132,75 @@ describe("TOY 设置存储", () => {
     Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
   });
 
+  function hidePage() {
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+    document.dispatchEvent(new Event("visibilitychange"));
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+  }
+
+  it("退避中页面隐藏：不等退避，立即强制写一次", async () => {
+    vi.useFakeTimers();
+    const { sdk, setCloudStorage, cloud } = fakeSdk();
+    setCloudStorage.mockRejectedValueOnce(new Error("network"));
+    window.toy = sdk;
+    const store = (await loadToy()).storage.settings("t");
+    await store.set("k", "值");
+    await vi.advanceTimersByTimeAsync(1200);
+    expect(setCloudStorage).toHaveBeenCalledTimes(1);
+    // 第一次失败后要等 2 秒才重试，页面这时被隐藏
+    hidePage();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(setCloudStorage).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(cloud.t_k ?? "{}").v).toBe("值");
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(setCloudStorage).toHaveBeenCalledTimes(2);
+  });
+
+  it("页面隐藏时还没有结果的写入一起重发；它之后迟到失败也不会再放回待写", async () => {
+    vi.useFakeTimers();
+    const { sdk, setCloudStorage, cloud } = fakeSdk();
+    let rejectFirst: (error: unknown) => void = () => {};
+    setCloudStorage.mockImplementationOnce(
+      () =>
+        new Promise<void>((_, reject) => {
+          rejectFirst = reject;
+        }),
+    );
+    window.toy = sdk;
+    const store = (await loadToy()).storage.settings("t");
+    await store.set("k", "值");
+    await vi.advanceTimersByTimeAsync(1200);
+    expect(setCloudStorage).toHaveBeenCalledTimes(1);
+    hidePage();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(setCloudStorage).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(cloud.t_k ?? "{}").v).toBe("值");
+    rejectFirst(new Error("network"));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(setCloudStorage).toHaveBeenCalledTimes(2);
+  });
+
+  it("flush 等写入有了结果才返回，告诉调用方写没写上；退避中不发", async () => {
+    vi.useFakeTimers();
+    const { sdk, setCloudStorage } = fakeSdk();
+    setCloudStorage.mockRejectedValueOnce(new Error("network"));
+    window.toy = sdk;
+    const toy = await loadToy();
+    const store = toy.storage.settings("t");
+    await expect(toy.storage.flush()).resolves.toBe(true);
+    await store.set("k", 1);
+    await expect(toy.storage.flush()).resolves.toBe(false);
+    expect(setCloudStorage).toHaveBeenCalledTimes(1);
+    // 失败后的 2 秒退避里再 flush：不发，如实返回没写
+    await expect(toy.storage.flush()).resolves.toBe(false);
+    expect(setCloudStorage).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(setCloudStorage).toHaveBeenCalledTimes(2);
+    await store.set("k", 2);
+    await expect(toy.storage.flush()).resolves.toBe(true);
+    expect(setCloudStorage).toHaveBeenCalledTimes(3);
+  });
+
   it("超过 1KB 的值只留在本机，不发给云存储", async () => {
     vi.useFakeTimers();
     vi.spyOn(console, "warn").mockImplementation(() => {});

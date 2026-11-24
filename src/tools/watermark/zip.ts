@@ -19,6 +19,9 @@ export function createZipStream(): ZipStream {
     resolveEnd = resolve;
     rejectEnd = reject;
   });
+  // 出错后 add 会抛出，调用方通常就不再调 finish；没人等 ended 时它的拒绝会变成未处理的 Promise 拒绝。
+  // 这里只标记为已处理，调 finish 的调用方照样拿到同一个拒绝。
+  ended.catch(() => {});
   const zip = new Zip((error, chunk, final) => {
     if (error) {
       failure = error;

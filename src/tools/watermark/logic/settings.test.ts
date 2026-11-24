@@ -1,5 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { applyPosition, clampSize, FACTORY_APP, FACTORY_MARK, filenameAsText, fontStack, migrateOffsetsV1, parseAppSettings, parseMarkSettings, summarize } from "./settings";
+import { planWatermark, SAFE_MARGIN } from "./plan";
+import {
+  applyPosition,
+  clampSize,
+  estimateV1Box,
+  FACTORY_APP,
+  FACTORY_MARK,
+  filenameAsText,
+  fontStack,
+  migrateOffsetsV1,
+  parseAppSettings,
+  parseMarkSettings,
+  summarize,
+  type MarkSettings,
+} from "./settings";
 
 describe("位置", () => {
   it("选格子时偏移归零，水印落在锚点上", () => {
@@ -12,16 +26,67 @@ describe("位置", () => {
 });
 
 describe("第 1 版位移换算", () => {
+  const point = { width: 0, height: 0 };
   it("贴边的老设置换成锚点上的 0", () => {
     expect(migrateOffsetsV1({ ...FACTORY_MARK, position: "top-left", offsetX: -100, offsetY: 100 })).toMatchObject({ offsetX: 0, offsetY: 0 });
     expect(migrateOffsetsV1({ ...FACTORY_MARK, position: "bottom-right", offsetX: 100, offsetY: -100 })).toMatchObject({ offsetX: 0, offsetY: 0 });
   });
   it("手动调过的值按新方向换算：向上为正变成向下为正", () => {
-    expect(migrateOffsetsV1({ ...FACTORY_MARK, position: "center", offsetX: 40, offsetY: 20 })).toMatchObject({ offsetX: 20, offsetY: -10 });
-    expect(migrateOffsetsV1({ ...FACTORY_MARK, position: "bottom-right", offsetX: 80, offsetY: -100 })).toMatchObject({ offsetX: -10, offsetY: 0 });
+    expect(migrateOffsetsV1({ ...FACTORY_MARK, position: "center", offsetX: 40, offsetY: 20 }, point)).toMatchObject({ offsetX: 20, offsetY: -10 });
+    expect(migrateOffsetsV1({ ...FACTORY_MARK, position: "bottom-right", offsetX: 80, offsetY: -100 }, point)).toMatchObject({ offsetX: -10, offsetY: 0 });
   });
   it("平铺只翻转垂直方向", () => {
     expect(migrateOffsetsV1({ ...FACTORY_MARK, position: "tile", offsetX: 30, offsetY: 30 })).toMatchObject({ offsetX: 30, offsetY: -30 });
+  });
+
+  describe("大水印（宽度占图 60%）落在第 1 版画的位置", () => {
+    // 3:2 的图，和换算时假定的宽高比一致，垂直方向也能精确对上
+    const W = 1500;
+    const H = 1000;
+    const margin = SAFE_MARGIN * Math.min(W, H);
+    const big = { ...FACTORY_MARK, type: "image" as const, markId: "m", size: 60 };
+    const markImage = { width: 600, height: 300 };
+    const box = estimateV1Box(big, { markAspect: markImage.height / markImage.width });
+    /** 第 1 版的九宫格公式：中心 + 位移% × (边长 − 外接框) / 2，向上为正。 */
+    const v1Center = (offsetX: number, offsetY: number) => ({
+      x: W / 2 + (offsetX / 100) * ((W - 900) / 2),
+      y: H / 2 - (offsetY / 100) * ((H - 450) / 2),
+    });
+    const v2Center = (s: MarkSettings) => planWatermark(s, { width: W, height: H }, "percent", () => 0, markImage)!.centers[0]!;
+
+    it("外接框按 size% 和水印图片宽高比估出", () => {
+      expect(box.width).toBeCloseTo(0.6);
+      expect(box.height).toBeCloseTo(0.45);
+    });
+
+    it("角上格子里拖回 0 的水印（第 1 版画在正中）：换算后仍在正中，只差角上锚点的安全边距", () => {
+      const migrated = migrateOffsetsV1({ ...big, position: "top-left", offsetX: 0, offsetY: 0 }, box);
+      const at = v2Center(migrated);
+      const want = v1Center(0, 0);
+      expect(at.x).toBeCloseTo(want.x + margin);
+      expect(at.y).toBeCloseTo(want.y + margin);
+    });
+
+    it("手动调过的值换算后和第 1 版位置一致（居中格没有安全边距）", () => {
+      const migrated = migrateOffsetsV1({ ...big, position: "center", offsetX: 50, offsetY: -40 }, box);
+      const at = v2Center(migrated);
+      const want = v1Center(50, -40);
+      expect(at.x).toBeCloseTo(want.x);
+      expect(at.y).toBeCloseTo(want.y);
+    });
+
+    it("贴边的仍落在新锚点上", () => {
+      expect(migrateOffsetsV1({ ...big, position: "bottom-right", offsetX: 100, offsetY: -100 }, box)).toMatchObject({ offsetX: 0, offsetY: 0 });
+    });
+  });
+
+  it("文字水印按字数和行数估外接框；像素单位不知道图多大，按 0 处理", () => {
+    const text = { ...FACTORY_MARK, text: "示例水印", size: 60 };
+    const box = estimateV1Box(text);
+    expect(box.width).toBeCloseTo(0.6);
+    // 4 个全角字一行：高 = 宽 × 1.2 / 4，再按 3:2 换成占图高的比例
+    expect(box.height).toBeCloseTo(0.6 * 0.3 * 1.5);
+    expect(estimateV1Box(text, { unit: "px" })).toEqual({ width: 0, height: 0 });
   });
 });
 

@@ -95,3 +95,38 @@ test("批量存相册有几张没存上：汇总结果，只重试没存上的",
   const album = await page.evaluate(() => (window as unknown as { __album: string[] }).__album);
   expect(album).toHaveLength(3);
 });
+
+test("重试轮里只剩最后一张又没存上：仍然只重试这一张，不把已存的再存一遍", async ({ page }) => {
+  await page.goto("index.html#/tools/watermark");
+  await expect(page.getByRole("button", { name: "打开图片" })).toBeEnabled();
+  await page
+    .locator("input[type=file][multiple]")
+    .setInputFiles([await syntheticPng(page, "一.png", 0), await syntheticPng(page, "二.png", 120), await syntheticPng(page, "三.png", 240)]);
+  await expect(page.getByRole("list", { name: "已打开的图片" }).getByRole("button")).toHaveCount(3);
+
+  // 第 2 次失败（首轮存 1 张），第 4 次失败（重试轮存上第 2 张、第 3 张没存上），第 5 次失败（重试最后一张又失败）
+  await page.evaluate(() => {
+    const fail = (window as unknown as { __failCalls: Set<number> }).__failCalls;
+    [2, 4, 5].forEach((n) => fail.add(n));
+  });
+  await page.getByRole("button", { name: "多选" }).click();
+  await page.getByRole("button", { name: "全选" }).click();
+  await page.getByRole("button", { name: "存 3 张到相册" }).click();
+  await expect(page.getByText("已存 1 张，2 张没存上")).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: "重试没存上的 2 张" }).click();
+  await expect(page.getByText("已存 1 张，1 张没存上")).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: "重试没存上的 1 张" }).click();
+  await expect(page.getByRole("dialog", { name: "长按图片保存" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "重试没存上的 1 张" })).toBeVisible();
+
+  await page.getByRole("button", { name: "重试没存上的 1 张" }).click();
+  await expect(page.getByText("已存到相册")).toBeVisible();
+  const album = await page.evaluate(() => (window as unknown as { __album: string[] }).__album);
+  expect(album).toHaveLength(3);
+  await expect(page.getByRole("button", { name: "存 3 张到相册" })).toBeVisible();
+});

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ApiError, checkBaseUrl, describeError, isValidApiKey, normalizeBaseUrl, redactKey, requestChat, testConnection, TimeoutError } from "./api";
+import { ApiError, checkBaseUrl, combineSignals, describeError, isValidApiKey, normalizeBaseUrl, redactKey, requestChat, testConnection, TimeoutError } from "./api";
 
 const config = { baseUrl: "https://llm.example.test/v1/", model: " demo-model " };
 
@@ -85,6 +85,79 @@ describe("requestChat", () => {
     const err = await requestChat(fetchFn, config, "k", [], { signal: new AbortController().signal, timeoutMs: 20 }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(TimeoutError);
     expect(describeError(err)).toContain("没有回复");
+  });
+});
+
+describe("没有 AbortSignal.any 的浏览器（Safari 17.4 以前）", () => {
+  function withoutAny(run: () => Promise<void>) {
+    return async () => {
+      const original = AbortSignal.any;
+      // @ts-expect-error 模拟旧浏览器缺这个方法
+      delete AbortSignal.any;
+      try {
+        await run();
+      } finally {
+        AbortSignal.any = original;
+      }
+    };
+  }
+
+  it(
+    "请求照常发出，用户停止仍抛 AbortError",
+    withoutAny(async () => {
+      const fetchFn = vi.fn<typeof fetch>(async () => json({ choices: [{ message: { content: "好" } }] }));
+      await expect(requestChat(fetchFn, config, "k", [], { signal: new AbortController().signal })).resolves.toBe("好");
+
+      const controller = new AbortController();
+      const hanging = vi.fn<typeof fetch>(
+        (_url, init) => new Promise((_resolve, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal?.reason))),
+      );
+      const pending = requestChat(hanging, config, "k", [], { signal: controller.signal });
+      controller.abort(new DOMException("stop", "AbortError"));
+      await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    }),
+  );
+
+  it(
+    "超时仍给出超时原因",
+    withoutAny(async () => {
+      const hanging = vi.fn<typeof fetch>(
+        (_url, init) => new Promise((_resolve, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal?.reason))),
+      );
+      const err = await requestChat(hanging, config, "k", [], { signal: new AbortController().signal, timeoutMs: 20 }).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(TimeoutError);
+    }),
+  );
+});
+
+describe("combineSignals 的转发实现", () => {
+  it("任一信号中止时带着它的 reason 中止，并移除所有监听", () => {
+    const a = new AbortController();
+    const b = new AbortController();
+    const removeA = vi.spyOn(a.signal, "removeEventListener");
+    const removeB = vi.spyOn(b.signal, "removeEventListener");
+    const { signal } = combineSignals([a.signal, b.signal], null);
+    expect(signal.aborted).toBe(false);
+    b.abort("原因B");
+    expect(signal.aborted).toBe(true);
+    expect(signal.reason).toBe("原因B");
+    expect(removeA).toHaveBeenCalledWith("abort", expect.any(Function));
+    expect(removeB).toHaveBeenCalledWith("abort", expect.any(Function));
+  });
+
+  it("dispose 后另一个信号再中止也不影响", () => {
+    const a = new AbortController();
+    const { signal, dispose } = combineSignals([a.signal], null);
+    dispose();
+    a.abort();
+    expect(signal.aborted).toBe(false);
+  });
+
+  it("传入时已有信号中止就直接中止", () => {
+    const a = new AbortController();
+    a.abort("早就停了");
+    const { signal } = combineSignals([a.signal, new AbortController().signal], null);
+    expect(signal.reason).toBe("早就停了");
   });
 });
 

@@ -308,3 +308,30 @@ test("另一个标签页清除了保存的密钥，这边跟着关掉记住，�
   expect(await storedValues(page)).not.toContain("sk-fictional-e2e");
   await other.close();
 });
+
+test("这边只在内存里存密钥时，另一个标签页打开记住不会换掉这边的密钥和开关", async ({ page, context }) => {
+  const mine = "sk-fictional-e2e-mine";
+  const theirs = "sk-fictional-e2e-theirs";
+  await page.goto("/tools/batch-text/");
+  await openSettings(page);
+  await page.getByLabel("接口密钥").fill(mine);
+
+  const other = await context.newPage();
+  await other.goto("/tools/batch-text/");
+  await openSettings(other);
+  await other.getByLabel("接口密钥").fill(theirs);
+  await other.getByRole("switch", { name: "在此设备记住" }).click();
+  await expect.poll(() => storedValues(other)).toContain(theirs);
+  // 那边又改一次，确保这边已经收到过 storage 事件
+  await other.getByLabel("接口密钥").fill(`${theirs}2`);
+  await expect.poll(() => storedValues(other)).toContain(`${theirs}2`);
+
+  await expect(page.getByLabel("接口密钥")).toHaveValue(mine);
+  await expect(page.getByRole("switch", { name: "在此设备记住" })).not.toBeChecked();
+  // 这边改自己内存里的密钥，不会把那边记住的删掉
+  await page.getByLabel("接口密钥").fill(`${mine}2`);
+  await page.waitForTimeout(200);
+  expect(await storedValues(page)).toContain(`${theirs}2`);
+  expect(await storedValues(page)).not.toContain(mine);
+  await other.close();
+});

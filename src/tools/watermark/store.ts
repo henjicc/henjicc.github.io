@@ -1,18 +1,45 @@
 import { create } from "zustand";
 import { persist, type PersistStorage } from "zustand/middleware";
+import { platform } from "~/platform";
 import { toolStorage } from "~/shell/tool/persist";
 import type { Mark, Preset } from "./logic/presets";
 import type { Selection } from "./logic/selection";
-import { FACTORY_APP, FACTORY_MARK, migrateOffsetsV1, parseAppSettings, parseMarkSettings, type AppSettings, type MarkSettings } from "./logic/settings";
+import {
+  estimateV1Box,
+  FACTORY_APP,
+  FACTORY_MARK,
+  migrateOffsetsV1,
+  parseAppSettings,
+  parseMarkSettings,
+  type AppSettings,
+  type MarkSettings,
+  type SizeUnit,
+} from "./logic/settings";
+import meta from "./meta";
 
 /** 第 2 版改了位移的含义（见 migrateOffsetsV1），三个存储都要换算存过的水印设置。 */
 const VERSION = 2;
 
-function migrateMark(value: unknown, version: number): MarkSettings {
+/** 换算要估水印在图上占多大：传入大小的单位（像素单位时不按 size% 估），以及水印图片的宽高（不知道时按方形估）。 */
+function migrateMark(value: unknown, version: number, hints: { unit: SizeUnit; mark?: { width: number; height: number } }): MarkSettings {
   const s = parseMarkSettings(value);
-  return version < 2 ? migrateOffsetsV1(s) : s;
+  if (version >= 2) return s;
+  const markAspect = hints.mark && hints.mark.width > 0 ? hints.mark.height / hints.mark.width : undefined;
+  return migrateOffsetsV1(s, estimateV1Box(s, { unit: hints.unit, markAspect }));
 }
-import meta from "./meta";
+
+/**
+ * 单位存在应用设置里，草稿和预设库换算时从存储里读：像素单位的 8–100 和百分比的数值重叠，猜错会把小字号当成占图很宽的水印。
+ * 没存过应用设置就是出厂的百分比。
+ */
+async function storedUnit(): Promise<SizeUnit> {
+  try {
+    const stored = await platform.storage.settings(meta.id).get<{ state?: { unit?: unknown } }>("settings");
+    return stored?.state?.unit === "px" ? "px" : "percent";
+  } catch {
+    return "percent";
+  }
+}
 
 /** 应用设置（默认水印、单位、导出格式）：几百字节，TOY 上存 B 站云存储。 */
 export const useApp = create<AppSettings>()(
@@ -22,7 +49,7 @@ export const useApp = create<AppSettings>()(
     storage: toolStorage<AppSettings>(meta.id, "settings"),
     migrate: (persisted, version) => {
       const p = (persisted ?? {}) as Partial<AppSettings>;
-      return { ...p, defaults: migrateMark(p.defaults, version) } as AppSettings;
+      return { ...p, defaults: migrateMark(p.defaults, version, { unit: p.unit === "px" ? "px" : "percent" }) } as AppSettings;
     },
     merge: (persisted, current) => ({ ...current, ...parseAppSettings(persisted) }),
   }),
@@ -39,7 +66,9 @@ export const useDraft = create<Draft>()(
     name: "draft",
     version: VERSION,
     storage: toolStorage<Draft>(meta.id, "local"),
-    migrate: (persisted, version) => ({ current: migrateMark((persisted as Partial<Draft> | undefined)?.current, version) }),
+    migrate: async (persisted, version) => ({
+      current: migrateMark((persisted as Partial<Draft> | undefined)?.current, version, { unit: await storedUnit() }),
+    }),
     merge: (persisted, current) => ({ ...current, current: parseMarkSettings((persisted as Partial<Draft> | undefined)?.current) }),
   }),
 );
@@ -78,10 +107,19 @@ export const useLibrary = create<Library>()(
     name: "library",
     version: VERSION,
     storage: verifiedStorage(toolStorage<Library>(meta.id, "local")),
-    migrate: (persisted, version) => {
+    migrate: async (persisted, version) => {
       const p = (persisted ?? {}) as Partial<Library>;
       if (!Array.isArray(p.presets)) return p as Library;
-      return { ...p, presets: p.presets.map((x) => (x && typeof x === "object" ? { ...x, settings: migrateMark(x.settings, version) } : x)) } as Library;
+      const unit = await storedUnit();
+      const marks = (p.marks && typeof p.marks === "object" ? p.marks : {}) as Record<string, Mark | undefined>;
+      const markOf = (settings: unknown) => {
+        const id = (settings as { markId?: unknown } | null | undefined)?.markId;
+        return typeof id === "string" ? marks[id] : undefined;
+      };
+      return {
+        ...p,
+        presets: p.presets.map((x) => (x && typeof x === "object" ? { ...x, settings: migrateMark(x.settings, version, { unit, mark: markOf(x.settings) }) } : x)),
+      } as Library;
     },
     merge: (persisted, current) => {
       const p = persisted as Partial<Library> | undefined;

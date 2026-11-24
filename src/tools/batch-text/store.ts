@@ -1,6 +1,6 @@
 import { create } from "zustand";
-import { persist, type PersistStorage } from "zustand/middleware";
-import { platform } from "~/platform";
+import { persist, type PersistStorage, type StorageValue } from "zustand/middleware";
+import { localKey, platform } from "~/platform";
 import { toolStorage } from "~/shell/tool/persist";
 import type { ApiConfig } from "./logic/api";
 import type { ExportFormat } from "./logic/files";
@@ -51,14 +51,25 @@ type Keys = {
 };
 
 /**
- * 密钥默认只在内存里，关掉页面就没了。remember 为 false 时每次变化都删掉存储里的那一份，
+ * 密钥默认只在内存里，关掉页面就没了。这一页从“记住”变成不记住时（关掉开关、清除）删掉存储里的那一份，
  * 所以关掉开关就等于把保存过的密钥删了；存储里有记录就说明上次是打开的。
+ * 本来就没打开“记住”的页面改密钥时不碰存储：另一个标签页可能刚打开“记住”存了自己的密钥，删掉就等于替那边关了。
  */
 function keyStorage(): PersistStorage<Keys> {
   const base = toolStorage<Keys>(meta.id, "local");
+  let remembered = false;
   return {
-    getItem: base.getItem,
-    setItem: (name, value) => (value.state.remember ? base.setItem(name, value) : base.removeItem(name)),
+    getItem: async (name) => {
+      const value = await base.getItem(name);
+      remembered = Boolean(value?.state?.remember);
+      return value;
+    },
+    setItem: (name, value) => {
+      const was = remembered;
+      remembered = value.state.remember;
+      if (value.state.remember) return base.setItem(name, value);
+      if (was) return base.removeItem(name);
+    },
     removeItem: base.removeItem,
   };
 }
@@ -72,14 +83,18 @@ export const useKeys = create<Keys>()(
 );
 
 /**
- * 多个标签页共用同一份存储。另一个标签页关掉“记住”或清除密钥时存储里那一份被删掉，这边要跟着关掉并丢掉内存里的密钥；
- * 否则这边下一次改动会把全部密钥原样写回去，等于撤销了那边的清除。存储里有记录时以存储为准。
- * 在 storage 事件里调用（只有别的标签页改动才会触发）。
+ * 多个标签页共用同一份存储，在 storage 事件里调用（只有别的标签页改动才会触发），只看密钥那一项。
+ * - 这边打开了“记住”：那边关掉或清除时跟着关掉并丢掉内存里的密钥，否则这边下一次改动会把全部密钥原样写回去，
+ *   等于撤销了那边的清除；那边改了密钥时以存储为准。
+ * - 这边只在内存里：不跟着那边打开“记住”，也不用存储里的密钥换掉这边填的。
  */
-export async function syncKeysFromStorage(): Promise<void> {
-  const stored = await platform.storage.local(meta.id).get<unknown>("keys");
-  if (stored !== undefined) await useKeys.persist.rehydrate();
-  else if (useKeys.getState().remember) useKeys.setState({ keys: {}, remember: false });
+export async function syncKeysFromStorage(event: Pick<StorageEvent, "key">): Promise<void> {
+  // key 为 null 表示那边清空了整个本机存储
+  if (event.key !== null && event.key !== localKey(meta.id, "keys")) return;
+  if (!useKeys.getState().remember) return;
+  const stored = await platform.storage.local(meta.id).get<StorageValue<Keys>>("keys");
+  if (stored?.state?.remember) await useKeys.persist.rehydrate();
+  else useKeys.setState({ keys: {}, remember: false });
 }
 
 /** 这一次打开的文件和结果，只在内存里（旧版也不保存）。 */

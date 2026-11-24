@@ -1,10 +1,10 @@
 // 本地静态服务器：预览网站构建结果，或把 TOY 包挂在 /toy/<路径>/ 下模拟线上的运行路径。
 //   node scripts/serve.ts build/client --port 4173
 //   node scripts/serve.ts dist-toy/toolbox --base toy/test --port 4317
-// 和 Cloudflare Pages 一样：目录返回 index.html，找不到的地址返回根目录的 404.html（状态码 404）。
+// 和 Cloudflare Pages 一样：目录返回 index.html，找不到的地址从所在目录往上找最近的 404.html（状态码 404）。
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { createServer } from "node:http";
-import { extname, join, normalize, resolve } from "node:path";
+import { dirname, extname, join, normalize, resolve } from "node:path";
 
 const args = process.argv.slice(2);
 const option = (name: string, fallback: string) => {
@@ -28,6 +28,17 @@ const TYPES: Record<string, string> = {
   ".woff2": "font/woff2",
   ".data": "text/x-script",
 };
+
+function nearestNotFound(urlPath: string): string | null {
+  let dir = join(root, normalize(decodeURIComponent(urlPath)).replace(/^([/\\])+/, ""));
+  if (!dir.startsWith(root)) dir = root;
+  for (;;) {
+    const page = join(dir, "404.html");
+    if (existsSync(page)) return page;
+    if (dir === root) return null;
+    dir = dirname(dir);
+  }
+}
 
 function resolveFile(urlPath: string): string | null {
   const sub = normalize(decodeURIComponent(urlPath)).replace(/^([/\\])+/, "");
@@ -53,9 +64,9 @@ createServer((req, res) => {
     res.end(readFileSync(file));
     return;
   }
-  const notFound = join(root, "404.html");
+  const notFound = nearestNotFound(url.pathname.slice(base.length - 1));
   res.writeHead(404, { "content-type": "text/html; charset=utf-8" });
-  res.end(existsSync(notFound) ? readFileSync(notFound) : "Not Found");
+  res.end(notFound ? readFileSync(notFound) : "Not Found");
 }).listen(port, () => {
   console.log(`http://localhost:${port}${base}`);
 });

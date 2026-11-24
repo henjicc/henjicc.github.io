@@ -170,7 +170,7 @@ test.describe("手机顶栏和菜单", () => {
     ];
     for (const t of targets) {
       const b = await box(t);
-      expect(b.height, await t.textContent()).toBeGreaterThanOrEqual(44);
+      expect(b.height, (await t.textContent()) ?? undefined).toBeGreaterThanOrEqual(44);
       expect(b.width).toBeGreaterThanOrEqual(44);
     }
   });

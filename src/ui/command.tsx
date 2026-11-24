@@ -2,7 +2,7 @@ import { Command as CommandPrimitive } from "cmdk";
 import { Search } from "lucide-react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import type * as React from "react";
-import { DialogOverlay, DialogPortal } from "~/ui/dialog";
+import { DialogOverlay, DialogPortal, useReturnFocus } from "~/ui/dialog";
 import { Kbd } from "~/ui/kbd";
 import { cn } from "~/ui/lib/utils";
 
@@ -28,12 +28,14 @@ function CommandDialog({
   onOpenChange: (open: boolean) => void;
   label: string;
 }) {
+  const focus = useReturnFocus({});
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPortal>
         <DialogOverlay />
         <DialogPrimitive.Content
           aria-describedby={undefined}
+          {...focus}
           className="fixed top-[12vh] left-1/2 z-50 w-[min(620px,calc(100%-32px))] -translate-x-1/2 outline-none data-[state=closed]:animate-[fade-out_var(--dur-quick)_var(--ease-in)_both] data-[state=open]:animate-[pop-in_var(--dur-base)_var(--ease-out)_both]"
         >
           <DialogPrimitive.Title className="sr-only">{label}</DialogPrimitive.Title>
@@ -60,7 +62,8 @@ function CommandInput({ className, ...props }: React.ComponentProps<typeof Comma
 }
 
 function CommandList({ className, ...props }: React.ComponentProps<typeof CommandPrimitive.List>) {
-  return <CommandPrimitive.List className={cn("max-h-90 overflow-auto p-2", className)} {...props} />;
+  // 面板从 12vh 开始，底部留约 5vh，再减去输入框和页脚的高度
+  return <CommandPrimitive.List className={cn("max-h-[min(640px,calc(83dvh-100px))] overflow-auto overscroll-contain p-2", className)} {...props} />;
 }
 
 function CommandEmpty({ className, ...props }: React.ComponentProps<typeof CommandPrimitive.Empty>) {
@@ -83,7 +86,7 @@ function CommandItem({ className, ...props }: React.ComponentProps<typeof Comman
   return (
     <CommandPrimitive.Item
       className={cn(
-        "flex h-11 cursor-pointer items-center gap-3 rounded-sm px-3 text-ui font-normal text-ink select-none data-[selected=true]:bg-sky-soft [&_svg]:size-[18px] [&_svg]:text-ink-muted data-[selected=true]:[&_svg]:text-sky-text",
+        "flex h-11 cursor-pointer items-center gap-3 rounded-sm border border-transparent px-3 text-ui font-normal text-ink select-none data-[selected=true]:border-sky-line data-[selected=true]:bg-sky-soft data-[selected=true]:text-sky-text [&_svg]:size-[18px] [&_svg]:text-ink-muted data-[selected=true]:[&_svg]:text-sky-text",
         className,
       )}
       {...props}
@@ -93,7 +96,7 @@ function CommandItem({ className, ...props }: React.ComponentProps<typeof Comman
 
 /** 条目右侧的元信息，如视频时长。 */
 function CommandMeta({ className, ...props }: React.ComponentProps<"span">) {
-  return <span className={cn("ml-auto text-caption text-ink-muted tabular-nums", className)} {...props} />;
+  return <span className={cn("ml-auto flex-none text-caption text-ink-muted tabular-nums", className)} {...props} />;
 }
 
 function CommandFooter({ className, ...props }: React.ComponentProps<"div">) {

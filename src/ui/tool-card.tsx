@@ -1,4 +1,4 @@
-import { ArrowUpRight, type LucideIcon } from "lucide-react";
+import { ArrowRight, ArrowUpRight, type LucideIcon } from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
 import { Link } from "react-router";
 import { cn } from "~/ui/lib/utils";
@@ -18,6 +18,8 @@ type ToolCardProps = {
   onClick?: (event: MouseEvent<HTMLAnchorElement>) => void;
   /** 宽卡片右侧的动态小样。 */
   glyph?: ReactNode;
+  /** 次要入口（如“想要别的工具？”）：surface-raised 底、灰色图标、没有箭头，横排成一条，不和工具抢眼。 */
+  quiet?: boolean;
   className?: string;
 };
 
@@ -32,8 +34,32 @@ export function iconBlock(plan: boolean, size: "md" | "sm" = "md") {
   );
 }
 
-function ToolCard({ id, name, summary, icon: Icon, status = "live", to, href, onClick, glyph, className }: ToolCardProps) {
+function ToolCard({ id, name, summary, icon: Icon, status = "live", to, href, onClick, glyph, quiet, className }: ToolCardProps) {
   const plan = status === "plan";
+  // 站内链接用 →，只有去别的网站才用 ↗
+  const Arrow = to ? ArrowRight : ArrowUpRight;
+  if (quiet) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noreferrer"
+        onClick={onClick}
+        className={cn(
+          "focus-ring press flex min-h-16 items-center gap-4 rounded-lg border border-line bg-surface-raised px-5 py-4 text-ink hover:border-line-strong",
+          className,
+        )}
+      >
+        <span className="grid size-9 flex-none place-items-center rounded-md bg-surface text-ink-muted [&_svg]:size-[18px]">
+          <Icon aria-hidden />
+        </span>
+        <span className="grid min-w-0 gap-0.5 sm:flex sm:items-baseline sm:gap-3">
+          <b className="text-ui font-semibold">{name}</b>
+          <span className="text-ui font-normal text-ink-muted">{summary}</span>
+        </span>
+      </a>
+    );
+  }
   const body = (
     <>
       <div className="flex min-w-0 flex-col">
@@ -44,7 +70,7 @@ function ToolCard({ id, name, summary, icon: Icon, status = "live", to, href, on
           {plan ? (
             <Tag tone="amber">计划中</Tag>
           ) : (
-            <ArrowUpRight
+            <Arrow
               aria-hidden
               className="size-[18px] text-ink-faint transition-[color,translate] duration-(--dur-quick) ease-out group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-sky-text"
             />

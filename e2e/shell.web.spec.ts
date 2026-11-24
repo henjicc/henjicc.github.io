@@ -254,3 +254,30 @@ test("theme-color 跟着当前主题", async ({ page }) => {
   expect(dawn).not.toBe(night);
   await expect(meta).toHaveAttribute("content", dawn);
 });
+
+test("手机上软键盘弹出时，贴底的对话框跟着可见区域上移，正在填的输入框不被挡住", async ({ page }) => {
+  test.skip(!mobile(page), "贴底的对话框只在手机上");
+  await page.goto("/tools/batch-text/");
+  // 安卓 Chrome 只有声明了 resizes-content，弹出键盘时才缩小布局视口；这里用缩小视口来模拟键盘
+  await expect(page.locator('meta[name="viewport"]')).toHaveAttribute("content", /interactive-widget=resizes-content/);
+  await expect(page.getByRole("button", { name: "开始处理" })).toBeEnabled();
+  await openSheet(page);
+  await page.getByRole("button", { name: "管理接口" }).click();
+  const dialog = page.getByRole("dialog", { name: "接口配置" });
+  await dialog.getByRole("button", { name: "编辑 默认配置" }).click();
+  const field = dialog.getByLabel("模型", { exact: true });
+  await field.focus();
+  const size = page.viewportSize()!;
+  const keyboardTop = Math.round(size.height * 0.55);
+  await page.setViewportSize({ width: size.width, height: keyboardTop });
+  // 浏览器在键盘弹出后会把正在填的输入框滚进可见区域；这里重新聚焦一次代替
+  await field.blur();
+  await field.focus();
+  await expect.poll(async () => {
+    const d = await box(dialog);
+    return d.y + d.height;
+  }).toBeLessThanOrEqual(keyboardTop + 1);
+  const f = await box(field);
+  expect(f.y).toBeGreaterThanOrEqual(0);
+  expect(f.y + f.height).toBeLessThanOrEqual(keyboardTop);
+});

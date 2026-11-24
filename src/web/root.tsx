@@ -15,7 +15,8 @@ export function Layout({ children }: { children: ReactNode }) {
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        {/* interactive-widget：安卓 Chrome 弹出软键盘时缩小布局视口，手机上贴底的对话框跟着上移，底部的输入框不被键盘挡住。TOY 的 index.html 同样写了 */}
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
         <Meta />
         <Links />

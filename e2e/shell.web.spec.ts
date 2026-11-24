@@ -59,6 +59,23 @@ test.describe("随机抽取的空格键", () => {
     await expect.poll(() => page.evaluate(() => document.fullscreenElement)).toBeNull();
   });
 
+  test("按住空格只触发一次，自动重复的按键也被拦下，不会滚动页面", async ({ page }) => {
+    await page.evaluate(() => {
+      const w = window as unknown as { repeats: boolean[] };
+      w.repeats = [];
+      window.addEventListener("keydown", (e) => {
+        if (e.code === "Space" && e.repeat) w.repeats.push(e.defaultPrevented);
+      });
+    });
+    await page.keyboard.down("Space");
+    await expect(page.getByRole("button", { name: "停下" })).toBeVisible();
+    // 已经按下时再 down 一次，Playwright 发出的是 repeat 为 true 的 keydown
+    for (let i = 0; i < 3; i++) await page.keyboard.down("Space");
+    await page.keyboard.up("Space");
+    expect(await page.evaluate(() => (window as unknown as { repeats: boolean[] }).repeats)).toEqual([true, true, true]);
+    await expect(page.getByRole("button", { name: "停下" })).toBeVisible();
+  });
+
   test("主按钮在“开始抽取”和“停下”之间不改变宽度", async ({ page }) => {
     const start = page.getByRole("button", { name: "开始抽取" });
     const width = (await box(start)).width;

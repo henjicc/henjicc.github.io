@@ -41,7 +41,7 @@ export function usePrimaryHotkey(hotkey: PrimaryHotkey, run: () => void, enabled
   useEffect(() => {
     if (!enabled) return;
     function onKey(e: KeyboardEvent) {
-      if (e.defaultPrevented || e.repeat) return;
+      if (e.defaultPrevented) return;
       if (document.querySelector("[role='dialog'][data-state='open']")) return;
       if (hotkey === "space") {
         if (e.code !== "Space" || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -52,7 +52,8 @@ export function usePrimaryHotkey(hotkey: PrimaryHotkey, run: () => void, enabled
         return;
       }
       e.preventDefault();
-      latest.current();
+      // 按住不放时的自动重复只拦下（不然空格会一直滚动页面），不重复触发主操作
+      if (!e.repeat) latest.current();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

@@ -27,3 +27,10 @@ dist-ssr
 
 # 本机专用目录：草稿、设计稿、截图、验收证据、任务记录，永不进仓库（见 rules/private-content.md）
 /.local/
+
+# 构建产物和测试输出
+/build/
+/dist-toy/
+/.react-router/
+/playwright-report/
+/test-results/

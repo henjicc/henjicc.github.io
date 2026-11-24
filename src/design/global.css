@@ -1,0 +1,389 @@
+/* Tailwind 入口：把雾林令牌映射成工具类，外加少量组件共用的样式和动效。数值只来自 tokens.css。 */
+@import "tailwindcss" source("../");
+@import "./tokens.css";
+
+/* 去掉 Tailwind 自带、雾林里没有的刻度，业务代码只能用雾林的颜色、字号和阴影。 */
+@theme {
+  --color-*: initial;
+  --text-*: initial;
+  --shadow-*: initial;
+  --inset-shadow-*: initial;
+  --drop-shadow-*: initial;
+  --radius-2xl: initial;
+  --radius-3xl: initial;
+  --radius-4xl: initial;
+}
+
+@theme inline {
+  --spacing: var(--space-1);
+
+  --color-ground: var(--ground);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-mist: var(--mist);
+  --color-mist-strong: var(--mist-strong);
+  --color-mist-line: var(--mist-line);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-sky: var(--sky);
+  --color-on-sky: var(--on-sky);
+  --color-sky-text: var(--sky-text);
+  --color-sky-soft: var(--sky-soft);
+  --color-sky-line: var(--sky-line);
+  --color-focus-ring: var(--focus-ring);
+  --color-forest: var(--forest);
+  --color-moss: var(--moss);
+  --color-moss-soft: var(--moss-soft);
+  --color-amber: var(--amber);
+  --color-amber-soft: var(--amber-soft);
+  --color-ember: var(--ember);
+  --color-ember-soft: var(--ember-soft);
+  --color-on-scene: var(--on-scene);
+  --color-on-scene-muted: var(--on-scene-muted);
+
+  /* shadcn 组件用的语义名，全部指向雾林令牌（变量定义在下面的 :root） */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --text-hero: var(--type-hero-size);
+  --text-hero--line-height: var(--type-hero-leading);
+  --text-hero--font-weight: var(--type-hero-weight);
+  --text-hero--letter-spacing: var(--type-hero-tracking);
+  --text-display: var(--type-display-size);
+  --text-display--line-height: var(--type-display-leading);
+  --text-display--font-weight: var(--type-display-weight);
+  --text-display--letter-spacing: var(--type-display-tracking);
+  --text-title-1: var(--type-title-1-size);
+  --text-title-1--line-height: var(--type-title-1-leading);
+  --text-title-1--font-weight: var(--type-title-1-weight);
+  --text-title-2: var(--type-title-2-size);
+  --text-title-2--line-height: var(--type-title-2-leading);
+  --text-title-2--font-weight: var(--type-title-2-weight);
+  --text-title-3: var(--type-title-3-size);
+  --text-title-3--line-height: var(--type-title-3-leading);
+  --text-title-3--font-weight: var(--type-title-3-weight);
+  --text-body-lg: var(--type-body-lg-size);
+  --text-body-lg--line-height: var(--type-body-lg-leading);
+  --text-body: var(--type-body-size);
+  --text-body--line-height: var(--type-body-leading);
+  --text-ui: var(--type-ui-size);
+  --text-ui--line-height: var(--type-ui-leading);
+  --text-ui--font-weight: var(--type-ui-weight);
+  --text-caption: var(--type-caption-size);
+  --text-caption--line-height: var(--type-caption-leading);
+  --text-micro: var(--type-micro-size);
+  --text-micro--line-height: var(--type-micro-leading);
+  --text-micro--font-weight: var(--type-micro-weight);
+  --text-stat: var(--type-stat-size);
+  --text-stat--line-height: var(--type-stat-leading);
+  --text-stat--font-weight: var(--type-stat-weight);
+  --text-timecode: var(--type-timecode-size);
+  --text-timecode--line-height: var(--type-timecode-leading);
+  --text-timecode--font-weight: var(--type-timecode-weight);
+  --text-timecode--letter-spacing: var(--type-timecode-tracking);
+  --text-keycap: var(--type-keycap-size);
+  --text-keycap--line-height: var(--type-keycap-leading);
+  --text-keycap--font-weight: var(--type-keycap-weight);
+  --text-keycap--letter-spacing: var(--type-keycap-tracking);
+
+  --font-num: var(--font-num);
+
+  --shadow-lift: var(--shadow-lift);
+  --shadow-float: var(--shadow-float);
+  --shadow-glow: var(--shadow-glow);
+  --shadow-inner-light: var(--inner-light);
+
+  --animate-mist-in: mist-in var(--dur-gentle) var(--ease-out) both;
+}
+
+:root {
+  --background: var(--ground);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --popover: var(--surface);
+  --popover-foreground: var(--ink);
+  --primary: var(--sky);
+  --primary-foreground: var(--on-sky);
+  --secondary: var(--surface-raised);
+  --secondary-foreground: var(--ink);
+  --muted: var(--surface-raised);
+  --muted-foreground: var(--ink-muted);
+  --accent: var(--sky-soft);
+  --accent-foreground: var(--sky-text);
+  --destructive: var(--ember);
+  --border: var(--line);
+  --input: var(--line-strong);
+  --ring: var(--focus-ring);
+  --radius: var(--radius-md);
+}
+
+@layer base {
+  html {
+    background: var(--ground);
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    font-size: var(--type-body-size);
+    line-height: var(--type-body-leading);
+    background: var(--ground);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  /* 设计系统规定 Lucide 描边 1.75 */
+  .lucide {
+    flex: none;
+    stroke-width: 1.75;
+  }
+  ::selection {
+    background: var(--sky-soft);
+    color: var(--ink);
+  }
+}
+
+/* dawn: 变体：当前显示的是晨雾（手动选的，或跟随系统的浅色）。只给不能用令牌表达的少数地方用，如主题按钮的图标。 */
+@custom-variant dawn {
+  :root[data-theme="dawn"] & {
+    @slot;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="night"]) & {
+      @slot;
+    }
+  }
+}
+
+/* 内容最宽 1200px；桌面左右留白 space-12，手机 space-4 */
+@utility wrap {
+  width: 100%;
+  max-width: calc(1200px + 2 * var(--space-12));
+  margin-inline: auto;
+  padding-inline: max(var(--space-4), env(safe-area-inset-left, 0px));
+  @media (width >= 48rem) {
+    padding-inline: var(--space-12);
+  }
+}
+
+/* 首屏照片上缓慢漂移的雾，周期 dur-ambient；减少动效时停下（全局规则把动画缩成 1ms） */
+@utility fog {
+  position: absolute;
+  inset: -20% -30%;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(26% 20% at 28% 60%, rgb(240 246 243 / 0.16), transparent 70%),
+    radial-gradient(24% 16% at 74% 38%, rgb(240 246 243 / 0.12), transparent 70%);
+  animation: fog-drift var(--dur-ambient) var(--ease-linear) infinite alternate;
+}
+
+/* 键盘焦点：2px 实线外扩 2px，跟随元素圆角 */
+@utility focus-ring {
+  &:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+}
+
+/* 按压反馈：缩到 0.97，dur-instant；颜色类变化 dur-quick */
+@utility press {
+  transition:
+    background-color var(--dur-quick) var(--ease-out),
+    border-color var(--dur-quick) var(--ease-out),
+    color var(--dur-quick) var(--ease-out),
+    box-shadow var(--dur-quick) var(--ease-out),
+    filter var(--dur-quick) var(--ease-out),
+    scale var(--dur-instant) var(--ease-out);
+  &:active:not(:disabled) {
+    scale: 0.97;
+  }
+}
+
+/* 雾层：只放在场景照片上 */
+@utility mist-panel {
+  background: var(--mist);
+  border: 1px solid var(--mist-line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--inner-light);
+  color: var(--on-scene);
+  backdrop-filter: blur(var(--blur-mist)) saturate(1.2);
+  -webkit-backdrop-filter: blur(var(--blur-mist)) saturate(1.2);
+}
+
+/* 场景：照片 + 竖向遮罩，遮罩在底部 4% 内完全变成 ground，避免照片边缘露出细缝。照片地址由 --scene-img 传入。 */
+@utility scene {
+  position: relative;
+  isolation: isolate;
+  color: var(--on-scene);
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -2;
+    background: var(--scene-img, none) center 30% / cover no-repeat;
+  }
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: linear-gradient(180deg, var(--scene-veil-top) 0%, var(--scene-veil-mid) 46%, var(--scene-veil-end) 96%);
+  }
+}
+
+/* 取景框：四角各一段带圆角的短线（整圈圆角描边只露出四个角）。data-over 时向内收 8px 并变成 sky。 */
+@utility vf {
+  position: relative;
+  &::before {
+    content: "";
+    position: absolute;
+    inset: var(--vf-inset, 12px);
+    z-index: 2;
+    pointer-events: none;
+    --l: var(--vf-corner, 28px);
+    border: 2px solid var(--line-strong);
+    border-radius: var(--radius-lg);
+    -webkit-mask:
+      linear-gradient(#000 0 0) top left / var(--l) var(--l) no-repeat,
+      linear-gradient(#000 0 0) top right / var(--l) var(--l) no-repeat,
+      linear-gradient(#000 0 0) bottom left / var(--l) var(--l) no-repeat,
+      linear-gradient(#000 0 0) bottom right / var(--l) var(--l) no-repeat;
+    mask:
+      linear-gradient(#000 0 0) top left / var(--l) var(--l) no-repeat,
+      linear-gradient(#000 0 0) top right / var(--l) var(--l) no-repeat,
+      linear-gradient(#000 0 0) bottom left / var(--l) var(--l) no-repeat,
+      linear-gradient(#000 0 0) bottom right / var(--l) var(--l) no-repeat;
+    transition:
+      inset var(--dur-base) var(--ease-out),
+      border-color var(--dur-base) var(--ease-out);
+  }
+  &[data-over="true"]::before {
+    inset: calc(var(--vf-inset, 12px) + 8px);
+    border-color: var(--sky);
+  }
+}
+
+/* 雾散入场 / 雾隐退场 */
+@keyframes mist-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+    filter: blur(var(--blur-enter));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
+}
+@keyframes mist-out {
+  to {
+    opacity: 0;
+    transform: translateY(-6px);
+    filter: blur(4px);
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+    filter: blur(4px);
+  }
+}
+@keyframes fog-drift {
+  from {
+    transform: translateX(-6%);
+    opacity: 0.75;
+  }
+  to {
+    transform: translateX(6%);
+    opacity: 1;
+  }
+}
+
+/* 页面过渡：旧页面雾隐、新页面雾散；同名元素（顶栏、工具图标和名字）在两页之间移动 */
+::view-transition-old(root) {
+  animation: mist-out var(--dur-quick) var(--ease-in) both;
+}
+::view-transition-new(root) {
+  animation: mist-in var(--dur-gentle) var(--ease-out) 80ms both;
+}
+::view-transition-group(*) {
+  animation-duration: var(--dur-gentle);
+  animation-timing-function: var(--ease-in-out);
+}
+/* 文字类共享元素按高度缩放、靠左对齐，避免字被拉宽 */
+::view-transition-old(*.tool-name),
+::view-transition-new(*.tool-name) {
+  height: 100%;
+  width: auto;
+  object-fit: contain;
+  object-position: left center;
+}
+/* 主题切换：整页一起做圆形扩散，临时去掉共享元素命名 */
+.vt-theme::view-transition-old(root),
+.vt-theme::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+.vt-theme [data-vt] {
+  view-transition-name: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-duration: 1ms !important;
+  }
+  /* 页面过渡只保留 dur-quick 以内的淡入淡出，共享元素直接出现在终点 */
+  ::view-transition-old(root) {
+    animation: fade-out var(--dur-quick) linear both !important;
+  }
+  ::view-transition-new(root) {
+    animation: fade-in var(--dur-quick) linear both !important;
+  }
+  ::view-transition-group(*) {
+    animation-duration: 1ms !important;
+  }
+}

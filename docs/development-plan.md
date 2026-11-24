@@ -65,6 +65,7 @@ export interface Platform {
   openBili(type: "video" | "space" | "opus", id: string): Promise<void>;
   openExternal(url: string): void;
   saveImage(canvas: HTMLCanvasElement, filename: string): Promise<"saved" | "downloaded" | "shown">;
+  copyText(text: string): Promise<"copied" | "selected">;   // TOY 里剪贴板接口被拒，退回 execCommand 或选中文本
   shareImage?(canvas: HTMLCanvasElement): Promise<void>;
   storage: {                        // 按工具分命名空间，值都是 JSON；TOY 上单个值不超过 1KB
     get<T>(key: string): Promise<T | undefined>;
@@ -196,7 +197,20 @@ TOY 不靠“发布前转换网站产物”实现，而是在构建时就打出�
 - 先只上传拿预览：页面跑在独立来源 `www.bilibilitoy.com` 的 iframe 里，读不到 B 站登录 cookie，本地存储和主站隔开（但所有 TOY 很可能共用这个来源，仍然不放密钥）；外部请求和图片都通，没有内容安全策略拦截。预览状态下 SDK 拿不到 TOY 的 id，作者资料、云存储写入、二维码都不可用，所以必须正式发布才能测全。
 - 以“密码访问”提交审核：标题“痕迹工具箱测试”，路径 `henji-toy-probe`，id `58660860469248`。访问密码在本机 `.local/toy-probe/toy-assets/` 里。
 
-### 审核通过后在 B 站 App 里测
+### App 实测结果（2026-11-24，手机 B 站 App）
+
+- 页面跑在 `www.bilibilitoy.com` 的 iframe 里，UA 带 BiliApp；可用区域 400 × 713（3 倍屏）。App 自己占了顶栏和底部互动栏，CSS 安全区和 SDK 报的安全区都是 0，所以页面不用再为刘海和底部横条留空。
+- 全部 SDK 能力可用，包括存相册、分享、分享图片、二维码、关闭页面、全屏模式、容器状态、云存储；作者资料能读到粉丝数，云存储能写能读。
+- View Transitions、backdrop-filter、`:has`、容器查询、color-mix 都支持；设计系统里的效果在 App 里都能用。
+- 读不到 B 站登录 cookie；localStorage 和 IndexedDB 可用。
+- 能请求 henjihenji.com 和 jsDelivr，能加载外站图片，没有内容安全策略拦截。
+- **剪贴板接口被拒**：`navigator.clipboard.writeText` 存在但调用失败。TOY 里的“复制”要先试 `document.execCommand("copy")`，再不行就选中文本让用户长按复制；平台适配层加一个 `copyText`。
+- `navigator.share` 不可用，分享统一走 SDK。
+- 从工具页回到检测页时是在 TOY 内部后退（哈希变为空），没有直接退出。
+
+### 还没确认（手动按钮的日志在页面重载后丢了，等作者描述）
+
+### 原定在 App 里测的项目
 
 1. TOY 页面是不是和 B 站主站同源、本地存储是不是和别的页面共用（检测页会显示已有键的数量，以及能不能读到登录状态，只判断有无，不读具体内容）。这决定批量文本处理能不能在 TOY 上保存接口密钥。
 2. 云存储、作者资料、关注状态这几个接口能不能用（本地调用会超时，属正常）。

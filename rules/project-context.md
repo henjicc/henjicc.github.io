@@ -12,9 +12,11 @@ template_version: 27
 
 - 产品：B 站 AI 科技区 UP 主「痕继痕迹」的个人主页 henjihenji.com。它是作品集和工具站的混合体：介绍本人，放视频和其他作品（以后会有摄影等），也是作者自己写的纯前端小工具的家。
 - 产品形态：纯静态，没有后端。所有处理都在访客浏览器里完成，不上传用户文件。
-- 已批准的计划（2026-11-24 用户确认）。**做法以 [`docs/development-plan.md`](../docs/development-plan.md) 为准**；第 1 阶段骨架和第 3 阶段的随机抽取已写进 `src/`，还没切换上线（线上仍是根目录的旧站点）。要点：
+- 已批准的计划（2026-11-24 用户确认）。**做法以 [`docs/development-plan.md`](../docs/development-plan.md) 为准**；第 1 阶段骨架、第 2 阶段的首页 / 作品 / 关于和第 3 阶段的随机抽取已写进 `src/`，还没切换上线（线上仍是根目录的旧站点）。要点：
   - 同一份代码发布到两个目标：网站（henjihenji.com，Cloudflare Pages，全部内容）和 B 站 TOY（只放工具：工具箱合集和单个工具）。两者的差异只放在平台适配层里。
-  - 一个仓库、一个域名：主页 `/`，作品 `/works/`，工具 `/tools/<id>/`，关于 `/about/`。水印工具和批量 LLM 文本处理器的源码迁进本仓库；`wmt.henjihenji.com` 用 Cloudflare 重定向规则 301 到新地址，确认可用后再删除对应的独立 Pages 项目。
+  - 一个仓库、一个域名：主页 `/`，作品 `/works/`（目前只有视频，没有子页面），工具 `/tools/<id>/`，关于 `/about/`。水印工具和批量 LLM 文本处理器的源码迁进本仓库；`wmt.henjihenji.com` 用 Cloudflare 重定向规则 301 到新地址，确认可用后再删除对应的独立 Pages 项目。
+  - 2026-11-24 用户决定：“转个格式”这一轮不迁（`gszh` 保持原样，新站暂时没有入口）；批量文本处理第一版只上网站、不上 TOY，接口密钥默认只放内存，用户自己选记住时才存到设备上；迁入的旧工具不再保留英文界面。
+  - 视频数据只在 Cloudflare Pages 构建时拉取，失败用仓库里提交的快照 `src/content/videos.json`；每天由 GitHub Actions 调部署钩子触发构建（钩子和 Secret 切换上线时经用户确认再建）。海外构建机能不能拉到还没验证，看第一次预览构建的日志。
   - 按“雾林设计系统”重新设计全部页面和工具，视觉完全统一（见下方“设计系统”）。
   - 分阶段上线，第 0 阶段先在 TOY 上验证几件文档里确认不了的事。
 - 明确不做：常用软件 / 装机清单（2026-11-24 用户决定整体去掉，重构后不再保留现在主页的“常用软件”弹窗）。
@@ -56,6 +58,8 @@ template_version: 27
 - **推送 `main` 就是上线。** Cloudflare Pages 和 GitHub Pages 都会自动发布 `main`，所以推送前要用户确认（见下方协作例外）。
 - **仓库根目录下的已跟踪文件都能被公开访问**，因为 Pages 直接发布根目录。`AGENTS.md`、`rules/`、`.githooks/` 也会被访问到。仓库本来就是公开的，所以不算泄漏，但别往根目录放不想公开的东西。重构引入构建步骤后改为只发布构建产物。
 - 工具链接要写成目录路径（`./tools/random-picker/`）。2025-12 写成 `.../index.html` 时线上打不开，改成目录路径后正常。
+- B 站图床（`i*.hdslb.com`）对带第三方 Referer 的请求返回 403，封面和头像的 `<img>` 必须 `referrerpolicy="no-referrer"`（`VideoCard` 已写死）。
+- 首页首屏脚本预算 gzip 145KB（开发方案第 11 节），只剩几 KB 余量：大块数据走路由 `loader`，重的代码按需加载。字体的 `@font-face` 规则让全站 CSS 约 450KB（gzip 约 150KB，Cloudflare 的 brotli 更小）。
 - 浏览器本地存储按域名隔开。工具从子域名搬到主站后，访客在旧地址存的设置不会带过来。
 - **TOY 和网站不是同一种运行环境**（依据官方文档，2026-11-24）：页面跑在 `/toy/<路径>/` 下，只能用相对路径；路由用哈希模式（`#/xxx`，官方推荐），分享深链只能带 query；只发布白名单后缀的文件（`.avif`、`.txt`、`.map` 等会被过滤）；当前账号包体上限 140MB。B 站内跳转、存相册、分享、设置记忆都走官方 SDK。所以页面和工具不能直接用 `window.open`、`localStorage`、`location`，统一走平台适配层（见开发方案第 3 节）。TOY 是否和 B 站主站同源还没在 App 里实测，实测前不往 TOY 的本地存储里放任何密钥。
 - TOY 在 B 站 App 里实测（2026-11-24）：页面跑在 `www.bilibilitoy.com` 的 iframe 里；SDK 能力全部可用；剪贴板接口被拒；存相册没有系统提示；**手机侧滑返回会直接退出 TOY**，所以 TOY 里页面层级要浅、工具状态要随时保存。详见开发方案第 9 节。
@@ -66,9 +70,10 @@ template_version: 27
 
 ## 运行与验证
 
-- 先 `npm install`（Node ≥ 22.22）。命令：
+- 先 `npm install`（Node ≥ 22.22；`.node-version` 写的是 24，Cloudflare Pages 按它选版本）。命令：
   - `npm run dev`：本地开发网站（React Router 开发服务器）。
-  - `npm run build:web`：构建网站到 `build/client/`（每个页面预渲染成 HTML，另生成 Cloudflare Pages 用的 `404.html`）；`npm run preview` 在 http://localhost:4173/ 预览构建结果。
+  - `npm run build:web`：构建网站到 `build/client/`（每个页面预渲染成 HTML，另生成 Cloudflare Pages 用的 `404.html`）；`npm run preview` 在 http://localhost:4173/ 预览构建结果。只有 Cloudflare Pages 上（`CF_PAGES=1`）会先拉取视频数据，本地构建不改快照。
+  - `npm run videos`：手动拉取最新视频数据覆盖 `src/content/videos.json`，看过 diff 再提交。
   - `npm run toy -- <toolbox | 工具 id>`：打 TOY 包到 `dist-toy/<目标>/` 并检查，封面和图标在 `dist-toy/<目标>-assets/`。从不上传。
   - `npm run check`：路由类型生成 + `tsc` + ESLint + Vitest。
   - `npm run e2e`：先构建网站和 TOY 工具箱，再用 Playwright 跑冒烟（网站桌面和手机、TOY 包挂在本地 `/toy/test/`）。浏览器用本机装的 Chrome。
